@@ -1,0 +1,102 @@
+{
+  "name": "soft-assist",
+  "displayName": "Soft Assistant",
+  "description": "AI-powered code assistant using cloud APIs",
+  "version": "0.0.3",
+  "engines": {
+    "vscode": "^1.97.0"
+  },
+  "activationEvents": [
+    "onCommand:soft-assist.openAIPanel",
+    "onCommand:soft-assist.askQuestion",
+    "onView:ai-assistant-view"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "soft-assist.openAIPanel",
+        "title": "Open AI Assistant Panel",
+        "icon": "$(lightbulb)"
+      },
+      {
+        "command": "soft-assist.askQuestion",
+        "title": "Ask AI Assistant"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ai-assistant",
+          "title": "AI Assistant",
+          "icon": "$(lightbulb)"
+        }
+      ]
+    },
+    "views": {
+      "ai-assistant": [
+        {
+          "id": "ai-assistant-view",
+          "name": "AI Assistant",
+          "type": "webview"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "AI Assistant",
+      "properties": {
+        "soft-assist.provider": {
+          "type": "string",
+          "enum": ["anthropic", "openai", "deepseek"],
+          "default": "anthropic",
+          "description": "The AI provider to use"
+        },
+        "soft-assist.anthropicApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for Anthropic Claude"
+        },
+        "soft-assist.anthropicModel": {
+          "type": "string",
+          "default": "claude-3-haiku-20240307",
+          "description": "Anthropic model to use (e.g., claude-3-haiku-20240307, claude-3-sonnet-20240229)"
+        },
+        "soft-assist.openaiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for OpenAI"
+        },
+        "soft-assist.openaiModel": {
+          "type": "string",
+          "default": "gpt-3.5-turbo",
+          "description": "OpenAI model to use (e.g., gpt-3.5-turbo, gpt-4)"
+        },
+        "soft-assist.deepseekApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for Deepseek"
+        },
+        "soft-assist.deepseekModel": {
+          "type": "string",
+          "default": "deepseek-coder",
+          "description": "Deepseek model to use"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "copy-webview": "node scripts/copy-webview.js",
+    "compile": "tsc -p ./ && npm run copy-webview",
+    "watch": "tsc -watch -p ./ & npm run copy-webview",
+    "clean": "node scripts/clean.js"
+  },
+  "devDependencies": {
+    "@types/node": "20.x",
+    "@types/vscode": "^1.97.0",
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.0"
+  },
+  "private": true
+}
