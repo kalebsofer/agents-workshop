@@ -12,6 +12,7 @@
         const addContextBtn = document.getElementById('add-context-btn');
         const sendBtn = document.getElementById('send-btn');
         const attachedFiles = new Set();
+        let isLoading = false;
 
         if (!chatContainer || !questionInput || !addContextBtn || !sendBtn) {
             throw new Error('Required DOM elements not found');
@@ -26,11 +27,57 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
+        // Show loading indicator
+        function showLoading() {
+            if (isLoading) return;
+            isLoading = true;
+            
+            // Disable input and buttons while loading
+            questionInput.disabled = true;
+            sendBtn.disabled = true;
+            addContextBtn.disabled = true;
+            
+            // Create loading element
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'loading';
+            loadingDiv.id = 'loading-indicator';
+            
+            const spinner = document.createElement('div');
+            spinner.className = 'spinner';
+            
+            const loadingText = document.createElement('span');
+            loadingText.className = 'loading-text';
+            loadingText.textContent = 'Assistant is thinking...';
+            
+            loadingDiv.appendChild(spinner);
+            loadingDiv.appendChild(loadingText);
+            chatContainer.appendChild(loadingDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        // Hide loading indicator
+        function hideLoading() {
+            if (!isLoading) return;
+            isLoading = false;
+            
+            // Re-enable input and buttons
+            questionInput.disabled = false;
+            sendBtn.disabled = false;
+            addContextBtn.disabled = false;
+            
+            // Remove loading indicator
+            const loadingIndicator = document.getElementById('loading-indicator');
+            if (loadingIndicator) {
+                loadingIndicator.remove();
+            }
+        }
+
         // Send a message
         function sendMessage() {
             const question = questionInput.value.trim();
             if (question) {
                 addMessage('user', question);
+                showLoading();
                 vscode.postMessage({ 
                     command: 'askQuestion',
                     text: question 
@@ -123,10 +170,14 @@
             const message = event.data;
             
             if (message.type === 'response') {
+                hideLoading();
                 addMessage('ai', message.content);
             } else if (message.type === 'fileAttached') {
                 attachedFiles.add(message.fileName);
                 updateAttachedFiles();
+            } else if (message.type === 'error') {
+                hideLoading();
+                addMessage('ai', `Error: ${message.content}`);
             }
         });
 

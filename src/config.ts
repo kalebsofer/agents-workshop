@@ -20,8 +20,8 @@ try {
 
 export const SECTION = 'agent-workshop';
 export const API_KEY = 'openaiApiKey';
-export const MODEL = 'openaiModel';
-export const DEFAULT_MODEL = 'gpt-o3-mini';
+export const MODEL = 'gpt-4o-mini-2024-07-18';
+export const DEFAULT_MODEL = 'gpt-4o-mini-2024-07-18';
 export const OPENAI_API_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 export const MAX_TOKENS = 4000;
 

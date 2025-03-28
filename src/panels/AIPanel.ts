@@ -154,7 +154,11 @@ export class AIPanel {
                 content: response 
             });
         } catch (error) {
-            this._handleError(`Failed to connect to OpenAI API: ${error}`);
+            AIPanel._outputChannel.appendLine(`Failed to connect to OpenAI API: ${error}`);
+            this._sendMessage({
+                type: 'error',
+                content: error instanceof Error ? error.message : String(error)
+            });
         }
     }
     
@@ -187,8 +191,10 @@ export class AIPanel {
             max_tokens: config.MAX_TOKENS
         };
         
+        let response;
         try {
-            const response = await fetch(config.OPENAI_API_ENDPOINT, {
+            AIPanel._outputChannel.appendLine(`Making request to ${config.OPENAI_API_ENDPOINT} with model ${this._model}`);
+            response = await fetch(config.OPENAI_API_ENDPOINT, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -200,7 +206,9 @@ export class AIPanel {
             const data = await response.json() as OpenAIResponse;
             
             if (!response.ok) {
-                throw new Error(`API error: ${data.error?.message || JSON.stringify(data)}`);
+                const errorMsg = data.error?.message || JSON.stringify(data);
+                AIPanel._outputChannel.appendLine(`API returned error: ${errorMsg}`);
+                throw new Error(`API error: ${errorMsg}`);
             }
             
             if (!data.choices || !data.choices[0]?.message?.content) {
@@ -209,6 +217,11 @@ export class AIPanel {
             
             return data.choices[0].message.content;
         } catch (error) {
+            // If this is a network error, provide a more user-friendly message
+            if (error instanceof TypeError && error.message.includes('fetch')) {
+                throw new Error('Network error: Could not connect to OpenAI API. Please check your internet connection.');
+            }
+            
             AIPanel._outputChannel.appendLine(`API call error: ${error}`);
             throw error;
         }

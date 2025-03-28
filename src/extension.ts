@@ -11,7 +11,7 @@ function getStatusViewContent(extensionPath: string): string {
 export function activate(context: vscode.ExtensionContext) {
 	console.log('AI Assistant extension is now active!');
 
-	const provider = vscode.window.registerWebviewViewProvider('ai-assistant-view', {
+	const provider = vscode.window.registerWebviewViewProvider('agent-workshop-view', {
 		resolveWebviewView: (webviewView) => {
 			webviewView.webview.options = {
 				enableScripts: true
