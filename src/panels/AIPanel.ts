@@ -14,6 +14,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as config from '../config';
+import { chatManager, Message } from '../chat/ChatManager';
 
 // Types
 interface OpenAIMessage {
@@ -43,6 +44,7 @@ export class AIPanel {
     private static readonly _outputChannel = vscode.window.createOutputChannel('AI Assistant');
     private attachedFiles: Map<string, string> = new Map();
     private readonly _extensionPath: string;
+    private _conversation: chatManager;
     
     private get _apiKey(): string {
         return config.getApiKey();
@@ -56,6 +58,11 @@ export class AIPanel {
         this._panel = panel;
         this._extensionPath = extensionUri.fsPath;
         AIPanel._outputChannel.appendLine('Initializing AI Assistant panel...');
+        
+        // Initialize conversation manager with system prompt
+        this._conversation = new chatManager(
+            'You are a helpful AI assistant for VS Code. Help the user with coding tasks, explain concepts, and assist with problem-solving.'
+        );
         
         this._setupWebview(extensionUri);
         
@@ -143,8 +150,14 @@ export class AIPanel {
             AIPanel._outputChannel.appendLine('Sending request to OpenAI API...');
             const startTime = Date.now();
             
-            const prompt = this._buildPrompt(question);
-            const response = await this._callOpenAI(prompt);
+            // Add user message to conversation history
+            this._conversation.addUserMessage(this._buildPrompt(question));
+            
+            // Get the response from OpenAI
+            const response = await this._callOpenAI();
+            
+            // Add assistant response to conversation history
+            this._conversation.addAssistantMessage(response);
             
             const duration = Date.now() - startTime;
             AIPanel._outputChannel.appendLine(`Request completed in ${duration}ms`);
@@ -175,7 +188,7 @@ export class AIPanel {
         return `Context:\n${context}\nQuestion: ${question}`;
     }
     
-    private async _callOpenAI(prompt: string): Promise<string> {
+    private async _callOpenAI(): Promise<string> {
         const apiKey = this._apiKey;
         
         if (!apiKey) {
@@ -183,17 +196,20 @@ export class AIPanel {
             throw new Error('No API key found for OpenAI. Please set it in settings or environment variables.');
         }
         
+        // Get all messages from conversation history
+        const messages = this._conversation.getMessages();
+        
         const requestBody: OpenAIRequest = {
             model: this._model,
-            messages: [
-                { role: 'user', content: prompt }
-            ],
+            messages: messages,
             max_tokens: config.MAX_TOKENS
         };
         
         let response;
         try {
             AIPanel._outputChannel.appendLine(`Making request to ${config.OPENAI_API_ENDPOINT} with model ${this._model}`);
+            AIPanel._outputChannel.appendLine(`Conversation length: ${this._conversation.getConversationLength()} messages, ~${this._conversation.getTokenCount()} tokens`);
+            
             response = await fetch(config.OPENAI_API_ENDPOINT, {
                 method: 'POST',
                 headers: {
