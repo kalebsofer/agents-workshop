@@ -15,6 +15,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as config from '../config';
 import { chatManager, Message } from '../chat/ChatManager';
+import { AgentExecutor, ExecutionResult } from '../agent/AgentExecutor';
 
 // Types
 interface OpenAIMessage {
@@ -44,7 +45,9 @@ export class AIPanel {
     private static readonly _outputChannel = vscode.window.createOutputChannel('AI Assistant');
     private attachedFiles: Map<string, string> = new Map();
     private readonly _extensionPath: string;
-    private _conversation: chatManager;
+    private _chat: chatManager;
+    private readonly _agentExecutor: AgentExecutor;
+    private _isAgentMode: boolean = false;
     
     private get _apiKey(): string {
         return config.getApiKey();
@@ -59,10 +62,26 @@ export class AIPanel {
         this._extensionPath = extensionUri.fsPath;
         AIPanel._outputChannel.appendLine('Initializing AI Assistant panel...');
         
-        // Initialize conversation manager with system prompt
-        this._conversation = new chatManager(
+        // Initialize chat manager with system prompt
+        this._chat = new chatManager(
             'You are a helpful AI assistant for VS Code. Help the user with coding tasks, explain concepts, and assist with problem-solving.'
         );
+        
+        // Initialize the agent executor
+        try {
+            this._agentExecutor = new AgentExecutor();
+            
+            // Subscribe to agent progress events
+            this._agentExecutor.progress.onProgress(message => {
+                this._sendMessage({
+                    type: 'agentProgress',
+                    content: message
+                });
+            });
+        } catch (error) {
+            AIPanel._outputChannel.appendLine(`Error initializing agent executor: ${error}`);
+            throw error;
+        }
         
         this._setupWebview(extensionUri);
         
@@ -85,13 +104,29 @@ export class AIPanel {
     
     private _setupMessageHandlers(): void {
         this._panel.webview.onDidReceiveMessage(
-            async (message: {command: string; text?: string; fileName?: string}) => {
+            async (message: {
+                command: string;
+                text?: string;
+                fileName?: string;
+                agentMode?: boolean;
+            }) => {
                 try {
                     switch (message.command) {
                         case 'askQuestion':
                             if (message.text) {
                                 AIPanel._outputChannel.appendLine(`Processing question: ${message.text}`);
-                                await this._handleQuestion(message.text);
+                                
+                                // Add user message to UI immediately
+                                this._sendMessage({
+                                    type: 'userMessage',
+                                    content: message.text
+                                });
+                                
+                                if (this._isAgentMode) {
+                                    await this._handleAgentQuestion(message.text);
+                                } else {
+                                    await this._handleQuestion(message.text);
+                                }
                             }
                             break;
                         case 'pickFiles':
@@ -107,6 +142,16 @@ export class AIPanel {
                             AIPanel._outputChannel.appendLine('Clearing all attached files');
                             this.attachedFiles.clear();
                             break;
+                        case 'toggleAgentMode':
+                            if (message.agentMode !== undefined) {
+                                this._isAgentMode = message.agentMode;
+                                AIPanel._outputChannel.appendLine(`Agent mode ${this._isAgentMode ? 'enabled' : 'disabled'}`);
+                                this._sendMessage({
+                                    type: 'agentModeChanged',
+                                    enabled: this._isAgentMode
+                                });
+                            }
+                            break;
                         default:
                             AIPanel._outputChannel.appendLine(`Unknown command: ${message.command}`);
                     }
@@ -121,6 +166,12 @@ export class AIPanel {
 
     public static async createOrShow(extensionUri: vscode.Uri): Promise<AIPanel> {
         AIPanel._outputChannel.appendLine('Creating or showing AI panel...');
+
+        // If we already have a panel, just reveal it
+        if (AIPanel.currentPanel) {
+            AIPanel.currentPanel._panel.reveal();
+            return AIPanel.currentPanel;
+        }
 
         const panel = vscode.window.createWebviewPanel(
             'aiAssistantPanel',
@@ -151,23 +202,76 @@ export class AIPanel {
             const startTime = Date.now();
             
             // Add user message to conversation history
-            this._conversation.addUserMessage(this._buildPrompt(question));
+            this._chat.addUserMessage(this._buildPrompt(question));
+            
+            // Show loading indicator
+            this._sendMessage({ type: 'loading', isLoading: true });
             
             // Get the response from OpenAI
             const response = await this._callOpenAI();
             
             // Add assistant response to conversation history
-            this._conversation.addAssistantMessage(response);
+            this._chat.addAssistantMessage(response);
             
             const duration = Date.now() - startTime;
             AIPanel._outputChannel.appendLine(`Request completed in ${duration}ms`);
             
+            // Hide loading indicator
+            this._sendMessage({ type: 'loading', isLoading: false });
+            
+            // Send response
             this._sendMessage({ 
                 type: 'response', 
                 content: response 
             });
         } catch (error) {
             AIPanel._outputChannel.appendLine(`Failed to connect to OpenAI API: ${error}`);
+            
+            // Hide loading indicator
+            this._sendMessage({ type: 'loading', isLoading: false });
+            
+            this._sendMessage({
+                type: 'error',
+                content: error instanceof Error ? error.message : String(error)
+            });
+        }
+    }
+    
+    private async _handleAgentQuestion(question: string): Promise<void> {
+        try {
+            AIPanel._outputChannel.appendLine('Processing agent question...');
+            
+            // Show loading indicator
+            this._sendMessage({ type: 'loading', isLoading: true });
+            
+            // Execute agent task
+            const result = await this._agentExecutor.execute(question);
+            
+            // Hide loading indicator
+            this._sendMessage({ type: 'loading', isLoading: false });
+            
+            if (result.success) {
+                // Add assistant response to chat history
+                this._chat.addAssistantMessage(result.response || 'Task completed successfully');
+                
+                // Send response
+                this._sendMessage({ 
+                    type: 'response', 
+                    content: result.response || 'Task completed successfully'
+                });
+            } else {
+                // Send error
+                this._sendMessage({
+                    type: 'error',
+                    content: result.error || 'Unknown error'
+                });
+            }
+        } catch (error) {
+            AIPanel._outputChannel.appendLine(`Agent execution error: ${error}`);
+            
+            // Hide loading indicator
+            this._sendMessage({ type: 'loading', isLoading: false });
+            
             this._sendMessage({
                 type: 'error',
                 content: error instanceof Error ? error.message : String(error)
@@ -197,7 +301,7 @@ export class AIPanel {
         }
         
         // Get all messages from conversation history
-        const messages = this._conversation.getMessages();
+        const messages = this._chat.getMessages();
         
         const requestBody: OpenAIRequest = {
             model: this._model,
@@ -208,7 +312,7 @@ export class AIPanel {
         let response;
         try {
             AIPanel._outputChannel.appendLine(`Making request to ${config.OPENAI_API_ENDPOINT} with model ${this._model}`);
-            AIPanel._outputChannel.appendLine(`Conversation length: ${this._conversation.getConversationLength()} messages, ~${this._conversation.getTokenCount()} tokens`);
+            AIPanel._outputChannel.appendLine(`Conversation length: ${this._chat.getchatLength()} messages, ~${this._chat.getTokenCount()} tokens`);
             
             response = await fetch(config.OPENAI_API_ENDPOINT, {
                 method: 'POST',
@@ -219,7 +323,10 @@ export class AIPanel {
                 body: JSON.stringify(requestBody)
             });
             
-            const data = await response.json() as OpenAIResponse;
+            const data = await response.json() as { 
+                choices?: Array<{ message?: { content?: string } }>;
+                error?: { message?: string, type?: string, code?: string }
+            };
             
             if (!response.ok) {
                 const errorMsg = data.error?.message || JSON.stringify(data);
@@ -328,6 +435,9 @@ export class AIPanel {
         AIPanel._outputChannel.appendLine('Disposing AI panel...');
         AIPanel.currentPanel = undefined;
         this._panel.dispose();
+        
+        // Dispose the agent executor
+        this._agentExecutor.dispose();
         
         for (const disposable of this._disposables) {
             disposable.dispose();

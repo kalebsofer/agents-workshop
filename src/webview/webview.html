@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,211 +10,372 @@
         img-src vscode-resource: https:;
         font-src https://cdn.jsdelivr.net;">
     <link href="https://cdn.jsdelivr.net/npm/@vscode/codicons/dist/codicon.css" rel="stylesheet" />
+    <title>AI Assistant</title>
     <style>
-        body { 
-            padding: 10px; 
-            color: var(--vscode-editor-foreground);
-            font-family: var(--vscode-font-family);
+        :root {
+            --vscode-background: #1e1e1e;
+            --vscode-foreground: #cccccc;
+            --vscode-input-background: #3c3c3c;
+            --vscode-input-foreground: #cccccc;
+            --vscode-button-background: #0e639c;
+            --vscode-button-foreground: #ffffff;
+            --vscode-button-hover-background: #1177bb;
+            --primary-color: #0e639c;
+            --secondary-color: #1177bb;
+            --border-color: #3c3c3c;
+            --message-user-bg: #2d3141;
+            --message-assistant-bg: #2d382d;
+            --error-color: #f44747;
+            --agent-color: #c586c0;
         }
-
-        #chat-container { 
-            height: 70vh; 
-            overflow-y: auto; 
-            margin-bottom: 60px;
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            padding: 0;
+            margin: 0;
+            background-color: var(--vscode-background);
+            color: var(--vscode-foreground);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
         }
-
-        .message { 
-            margin: 10px 0; 
-            padding: 10px; 
-            border-radius: 5px; 
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            max-width: 100%;
-            overflow-x: auto;
+        
+        .header {
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
         }
-
-        .user-message { 
-            background: var(--vscode-input-background);
-            border: 1px solid var(--vscode-input-border);
+        
+        .title {
+            font-size: 1.2em;
+            font-weight: 500;
+            margin: 0;
         }
-
-        .ai-message { 
-            background: var(--vscode-editor-background);
-            border: 1px solid var(--vscode-editor-lineHighlightBorder);
+        
+        .mode-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
-
-        #input-container { 
-            position: fixed; 
-            bottom: 0;
+        
+        .agent-toggle {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+        }
+        
+        .agent-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
             left: 0;
             right: 0;
-            background: var(--vscode-editor-background);
-            padding: 8px;
-            display: flex;
-            gap: 4px;
+            bottom: 0;
+            background-color: var(--vscode-input-background);
+            transition: .4s;
+            border-radius: 20px;
         }
-
-        #question-input { 
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: var(--vscode-foreground);
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: var(--agent-color);
+        }
+        
+        input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+        
+        #mode-label {
+            font-size: 0.9em;
+        }
+        
+        .messages {
             flex-grow: 1;
-            padding: 4px 8px;
-            background: var(--vscode-input-background);
-            color: var(--vscode-input-foreground);
-            border: 1px solid var(--vscode-input-border);
-            border-radius: 4px;
+            overflow-y: auto;
+            padding: 10px;
         }
-
-        #attached-files {
-            margin: 10px 0;
-            padding: 8px;
-            border-radius: 4px;
-            background: var(--vscode-editor-background);
-            border: 1px solid var(--vscode-input-border);
-            display: none;
-        }
-
-        #attached-files.has-files {
-            display: block;
-        }
-
-        .file-item {
+        
+        .message {
             display: flex;
-            align-items: center;
-            padding: 4px 8px;
-            margin: 4px 0;
-            background: var(--vscode-input-background);
-            border-radius: 3px;
+            margin-bottom: 16px;
+            animation: fadeIn 0.3s ease;
         }
-
-        .file-icon {
-            margin-right: 8px;
-            color: var(--vscode-symbolIcon-fileForeground);
+        
+        .user-message {
+            background-color: var(--message-user-bg);
+            border-radius: 8px;
+            padding: 10px;
         }
-
-        .file-name {
-            flex-grow: 1;
-            font-size: 12px;
-            color: var(--vscode-foreground);
+        
+        .assistant-message {
+            background-color: var(--message-assistant-bg);
+            border-radius: 8px;
+            padding: 10px;
         }
-
-        .remove-file {
-            padding: 2px 6px;
-            background: none;
-            border: none;
-            color: var(--vscode-icon-foreground);
-            cursor: pointer;
-            opacity: 0.7;
-        }
-
-        .remove-file:hover {
-            opacity: 1;
-        }
-
-        .files-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 4px 8px;
-            border-bottom: 1px solid var(--vscode-input-border);
-            margin-bottom: 8px;
-        }
-
-        .files-title {
-            font-size: 11px;
-            text-transform: uppercase;
-            color: var(--vscode-foreground);
-            opacity: 0.8;
-        }
-
-        .clear-files {
-            font-size: 11px;
-            color: var(--vscode-button-foreground);
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 2px 6px;
-            opacity: 0.8;
-        }
-
-        .clear-files:hover {
-            opacity: 1;
-        }
-
-        #add-context-btn, #send-btn {
-            padding: 4px 8px;
-            background: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
+        
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background-color: var(--vscode-button-background);
+            color: white;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 4px;
+            margin-right: 10px;
+            flex-shrink: 0;
         }
-
-        #add-context-btn:hover, #send-btn:hover {
-            background: var(--vscode-button-hoverBackground);
+        
+        .message-content {
+            flex-grow: 1;
+            line-height: 1.5;
         }
-
-        /* Add styles for codicon */
-        .codicon {
-            margin-right: 4px;
+        
+        .error-message {
+            background-color: rgba(244, 71, 71, 0.2);
+            color: var(--error-color);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            border-left: 3px solid var(--error-color);
         }
-
-        /* Loading indicator styles */
-        .loading {
-            display: flex;
-            align-items: center;
-            margin: 10px 0;
+        
+        .agent-progress {
+            background-color: rgba(197, 134, 192, 0.2);
+            color: var(--agent-color);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            border-left: 3px solid var(--agent-color);
+            font-style: italic;
+        }
+        
+        code {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: rgba(0, 0, 0, 0.2);
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        
+        pre {
+            background-color: rgba(0, 0, 0, 0.2);
             padding: 10px;
             border-radius: 5px;
-            background: var(--vscode-editor-background);
-            border: 1px solid var(--vscode-editor-lineHighlightBorder);
+            overflow-x: auto;
+            margin: 10px 0;
         }
-
-        .spinner {
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(150, 150, 150, 0.2);
-            border-radius: 50%;
-            border-top-color: var(--vscode-progressBar-background);
-            animation: spin 1s ease-in-out infinite;
-            margin-right: 10px;
+        
+        pre code {
+            background-color: transparent;
+            padding: 0;
         }
-
-        .loading-text {
-            color: var(--vscode-foreground);
-            opacity: 0.8;
+        
+        .footer {
+            padding: 10px;
+            border-top: 1px solid var(--border-color);
         }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+        
+        .input-container {
+            display: flex;
+            flex-direction: column;
         }
-
-        /* Disabled button state */
+        
+        .textarea-wrapper {
+            display: flex;
+        }
+        
+        #user-input {
+            flex-grow: 1;
+            padding: 8px 12px;
+            min-height: 40px;
+            max-height: 200px;
+            resize: none;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            margin-right: 8px;
+            font-family: inherit;
+            overflow-y: auto;
+        }
+        
+        button {
+            padding: 8px 16px;
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        
+        button:hover {
+            background-color: var(--vscode-button-hover-background);
+        }
+        
         button:disabled {
             opacity: 0.6;
             cursor: not-allowed;
         }
+        
+        .context-files {
+            margin-top: 10px;
+        }
+        
+        .context-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        
+        .context-title {
+            font-size: 0.9em;
+            font-weight: 500;
+            color: #888;
+        }
+        
+        .context-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .context-button {
+            padding: 4px 8px;
+            font-size: 0.8em;
+            background-color: var(--vscode-input-background);
+        }
+        
+        #file-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            max-height: 80px;
+            overflow-y: auto;
+        }
+        
+        .file-item {
+            display: flex;
+            align-items: center;
+            background-color: var(--vscode-input-background);
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 0.8em;
+        }
+        
+        .file-name {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .remove-file-button {
+            background: none;
+            border: none;
+            color: var(--vscode-foreground);
+            padding: 0 4px;
+            font-size: 1.1em;
+            cursor: pointer;
+            margin-left: 3px;
+        }
+        
+        .remove-file-button:hover {
+            color: var(--error-color);
+        }
+        
+        #loading-indicator {
+            display: none;
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid white;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
     </style>
 </head>
 <body>
-    <div id="attached-files">
-        <div class="files-header">
-            <span class="files-title">Attached Files</span>
-            <button class="clear-files" onclick="clearAllFiles()">Clear All</button>
+    <div class="header">
+        <h1 class="title">AI Assistant</h1>
+        <div class="mode-controls">
+            <span id="mode-label">Chat Mode</span>
+            <label class="agent-toggle">
+                <input type="checkbox" id="agent-mode-toggle">
+                <span class="toggle-slider"></span>
+            </label>
         </div>
-        <div id="files-list"></div>
     </div>
-    <div id="chat-container"></div>
-    <div id="input-container">
-        <button id="add-context-btn">
-            <span class="codicon codicon-add"></span>
-            Add context
-        </button>
-        <input type="text" id="question-input" placeholder="Ask a question...">
-        <button id="send-btn">Send</button>
+    
+    <div id="message-container" class="messages"></div>
+    
+    <div class="footer">
+        <div class="input-container">
+            <div class="textarea-wrapper">
+                <textarea id="user-input" placeholder="Ask a question..."></textarea>
+                <button id="submit-button">Send</button>
+            </div>
+            
+            <div class="context-files">
+                <div class="context-header">
+                    <div class="context-title">Context Files</div>
+                    <div class="context-buttons">
+                        <button id="attach-files-button" class="context-button">Attach</button>
+                        <button id="clear-files-button" class="context-button">Clear</button>
+                    </div>
+                </div>
+                <div id="file-list"></div>
+            </div>
+        </div>
     </div>
+    
+    <div id="loading-indicator">
+        <div class="spinner"></div>
+    </div>
+    
     <script src="webview.js"></script>
 </body>
 </html> 

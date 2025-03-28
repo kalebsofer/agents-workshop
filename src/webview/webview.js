@@ -1,189 +1,265 @@
 (function() {
     try {
-        if (typeof acquireVsCodeApi === 'undefined') {
-            throw new Error('acquireVsCodeApi is not defined');
-        }
-
         const vscode = acquireVsCodeApi();
         
-        // Get DOM elements
-        const chatContainer = document.getElementById('chat-container');
-        const questionInput = document.getElementById('question-input');
-        const addContextBtn = document.getElementById('add-context-btn');
-        const sendBtn = document.getElementById('send-btn');
-        const attachedFiles = new Set();
+        // DOM elements
+        const messageContainer = document.getElementById('message-container');
+        const userInput = document.getElementById('user-input');
+        const submitButton = document.getElementById('submit-button');
+        const fileList = document.getElementById('file-list');
+        const attachFilesButton = document.getElementById('attach-files-button');
+        const clearFilesButton = document.getElementById('clear-files-button');
+        const agentModeToggle = document.getElementById('agent-mode-toggle');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        
+        // State
         let isLoading = false;
-
-        if (!chatContainer || !questionInput || !addContextBtn || !sendBtn) {
-            throw new Error('Required DOM elements not found');
-        }
-
-        // Add messages to the chat
-        function addMessage(type, content) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'message ' + type + '-message';
-            messageDiv.textContent = content;
-            chatContainer.appendChild(messageDiv);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        }
-
-        // Show loading indicator
-        function showLoading() {
-            if (isLoading) return;
-            isLoading = true;
+        let isAgentMode = false;
+        
+        // Initialize
+        function initialize() {
+            // Set up event listeners
+            setupEventListeners();
             
-            // Disable input and buttons while loading
-            questionInput.disabled = true;
-            sendBtn.disabled = true;
-            addContextBtn.disabled = true;
-            
-            // Create loading element
-            const loadingDiv = document.createElement('div');
-            loadingDiv.className = 'loading';
-            loadingDiv.id = 'loading-indicator';
-            
-            const spinner = document.createElement('div');
-            spinner.className = 'spinner';
-            
-            const loadingText = document.createElement('span');
-            loadingText.className = 'loading-text';
-            loadingText.textContent = 'Assistant is thinking...';
-            
-            loadingDiv.appendChild(spinner);
-            loadingDiv.appendChild(loadingText);
-            chatContainer.appendChild(loadingDiv);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
+            // Add initial message
+            addMessage('assistant', 'Assistant is ready. How can I help you?');
         }
         
-        // Hide loading indicator
-        function hideLoading() {
-            if (!isLoading) return;
-            isLoading = false;
+        function setupEventListeners() {
+            // Submit button handler
+            submitButton.addEventListener('click', () => {
+                submitQuestion();
+            });
             
-            // Re-enable input and buttons
-            questionInput.disabled = false;
-            sendBtn.disabled = false;
-            addContextBtn.disabled = false;
+            // Enter key handler
+            userInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submitQuestion();
+                }
+            });
             
-            // Remove loading indicator
-            const loadingIndicator = document.getElementById('loading-indicator');
-            if (loadingIndicator) {
-                loadingIndicator.remove();
-            }
-        }
-
-        // Send a message
-        function sendMessage() {
-            const question = questionInput.value.trim();
-            if (question) {
-                addMessage('user', question);
-                showLoading();
-                vscode.postMessage({ 
-                    command: 'askQuestion',
-                    text: question 
+            // Input field resize handler
+            userInput.addEventListener('input', () => {
+                userInput.style.height = 'auto';
+                userInput.style.height = userInput.scrollHeight + 'px';
+            });
+            
+            // Attach files button
+            attachFilesButton.addEventListener('click', () => {
+                vscode.postMessage({
+                    command: 'pickFiles'
                 });
-                questionInput.value = '';
-            }
-        }
-
-        // Update file display
-        function updateAttachedFiles() {
-            const filesDiv = document.getElementById('attached-files');
-            const filesList = document.getElementById('files-list');
+            });
             
-            filesList.innerHTML = '';
+            // Clear files button
+            clearFilesButton.addEventListener('click', () => {
+                vscode.postMessage({
+                    command: 'clearFiles'
+                });
+                fileList.innerHTML = '';
+            });
             
-            if (attachedFiles.size > 0) {
-                filesDiv.classList.add('has-files');
+            // Agent mode toggle
+            agentModeToggle.addEventListener('change', () => {
+                isAgentMode = agentModeToggle.checked;
+                vscode.postMessage({
+                    command: 'toggleAgentMode',
+                    agentMode: isAgentMode
+                });
                 
-                attachedFiles.forEach((file) => {
-                    const fileItem = document.createElement('div');
-                    fileItem.className = 'file-item';
-                    
-                    const fileIcon = document.createElement('span');
-                    fileIcon.className = 'file-icon';
-                    fileIcon.textContent = '📄';
-                    
-                    const fileName = document.createElement('span');
-                    fileName.className = 'file-name';
-                    fileName.textContent = file.split(/[\\/]/).pop() || file;
-                    
-                    const removeButton = document.createElement('button');
-                    removeButton.className = 'remove-file';
-                    removeButton.title = 'Remove file';
-                    removeButton.textContent = '×';
-                    removeButton.onclick = () => removeFile(file);
-                    
-                    fileItem.appendChild(fileIcon);
-                    fileItem.appendChild(fileName);
-                    fileItem.appendChild(removeButton);
-                    filesList.appendChild(fileItem);
-                });
-            } else {
-                filesDiv.classList.remove('has-files');
-            }
-        }
-
-        // Clear all files
-        function clearAllFiles() {
-            attachedFiles.clear();
-            updateAttachedFiles();
-            vscode.postMessage({ command: 'clearFiles' });
-        }
-
-        // Add removeFile function
-        function removeFile(file) {
-            attachedFiles.delete(file);
-            updateAttachedFiles();
-            vscode.postMessage({ 
-                command: 'removeFile', 
-                fileName: file 
+                // Update UI to reflect agent mode
+                document.body.classList.toggle('agent-mode', isAgentMode);
+                updateAgentModeUI();
+            });
+            
+            // Listen for messages from extension
+            window.addEventListener('message', (event) => {
+                const message = event.data;
+                
+                switch (message.type) {
+                    case 'userMessage':
+                        addMessage('user', message.content || '');
+                        break;
+                    case 'response':
+                        hideLoading();
+                        addMessage('assistant', message.content || '');
+                        break;
+                    case 'error':
+                        hideLoading();
+                        addErrorMessage(message.content || 'Unknown error');
+                        break;
+                    case 'fileAttached':
+                        addFileToList(message.fileName || 'Unknown file');
+                        break;
+                    case 'loading':
+                        if (message.isLoading) {
+                            showLoading();
+                        } else {
+                            hideLoading();
+                        }
+                        break;
+                    case 'agentProgress':
+                        updateAgentProgress(message.content || '');
+                        break;
+                    case 'agentModeChanged':
+                        if (message.enabled !== undefined) {
+                            isAgentMode = message.enabled;
+                            agentModeToggle.checked = isAgentMode;
+                            document.body.classList.toggle('agent-mode', isAgentMode);
+                            updateAgentModeUI();
+                        }
+                        break;
+                }
             });
         }
-
-        // Make clearAllFiles function available in global scope for onclick
-        window.clearAllFiles = function() {
-            attachedFiles.clear();
-            updateAttachedFiles();
-            vscode.postMessage({ command: 'clearFiles' });
-        };
-
-        // Add click handlers
-        sendBtn.addEventListener('click', () => {
-            sendMessage();
-        });
-
-        addContextBtn.addEventListener('click', () => {
-            vscode.postMessage({ command: 'pickFiles' });
-        });
-
-        // Add enter key handler
-        questionInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-
-        // Handle messages from the extension
-        window.addEventListener('message', event => {
-            const message = event.data;
+        
+        function submitQuestion() {
+            const question = userInput.value.trim();
             
-            if (message.type === 'response') {
-                hideLoading();
-                addMessage('ai', message.content);
-            } else if (message.type === 'fileAttached') {
-                attachedFiles.add(message.fileName);
-                updateAttachedFiles();
-            } else if (message.type === 'error') {
-                hideLoading();
-                addMessage('ai', `Error: ${message.content}`);
+            if (!question || isLoading) {
+                return;
             }
-        });
-
-        // Add initial message
-        addMessage('ai', 'Assistant is ready. How can I help you?');
-
+            
+            // Send question to extension
+            vscode.postMessage({
+                command: 'askQuestion',
+                text: question
+            });
+            
+            // Clear input field
+            userInput.value = '';
+            userInput.style.height = 'auto';
+            
+            // Show loading state
+            showLoading();
+        }
+        
+        function addMessage(role, content) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}-message`;
+            
+            // Create avatar
+            const avatar = document.createElement('div');
+            avatar.className = 'avatar';
+            avatar.textContent = role === 'user' ? 'U' : 'AI';
+            
+            // Create content
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            
+            // Format message with markdown
+            contentDiv.innerHTML = formatMessage(content);
+            
+            // Assemble message
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(contentDiv);
+            
+            // Add to container
+            messageContainer.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            messageContainer.scrollTop = messageContainer.scrollHeight;
+        }
+        
+        function addErrorMessage(errorText) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = errorText;
+            
+            messageContainer.appendChild(errorDiv);
+            
+            // Scroll to bottom
+            messageContainer.scrollTop = messageContainer.scrollHeight;
+        }
+        
+        function updateAgentProgress(progress) {
+            // Check if a progress message already exists
+            const existingProgress = document.querySelector('.agent-progress');
+            
+            if (existingProgress) {
+                // Update existing progress
+                existingProgress.textContent = progress;
+            } else {
+                // Create new progress element
+                const progressDiv = document.createElement('div');
+                progressDiv.className = 'agent-progress';
+                progressDiv.textContent = progress;
+                messageContainer.appendChild(progressDiv);
+                
+                // Scroll to bottom
+                messageContainer.scrollTop = messageContainer.scrollHeight;
+            }
+        }
+        
+        function formatMessage(text) {
+            // Simple markdown-like formatting
+            // Code blocks
+            text = text.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+            
+            // Inline code
+            text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+            
+            // Bold
+            text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            
+            // Italic
+            text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+            
+            // Line breaks
+            text = text.replace(/\n/g, '<br>');
+            
+            return text;
+        }
+        
+        function addFileToList(fileName) {
+            const fileItem = document.createElement('div');
+            fileItem.className = 'file-item';
+            
+            // Get file name without path
+            const shortName = fileName.split(/[\/\\]/).pop() || fileName;
+            
+            fileItem.innerHTML = `
+                <span class="file-name" title="${fileName}">${shortName}</span>
+                <button class="remove-file-button">×</button>
+            `;
+            
+            // Add remove button handler
+            const removeButton = fileItem.querySelector('.remove-file-button');
+            removeButton.addEventListener('click', () => {
+                vscode.postMessage({
+                    command: 'removeFile',
+                    fileName: fileName
+                });
+                fileItem.remove();
+            });
+            
+            fileList.appendChild(fileItem);
+        }
+        
+        function showLoading() {
+            isLoading = true;
+            loadingIndicator.style.display = 'flex';
+            submitButton.disabled = true;
+        }
+        
+        function hideLoading() {
+            isLoading = false;
+            loadingIndicator.style.display = 'none';
+            submitButton.disabled = false;
+        }
+        
+        function updateAgentModeUI() {
+            const modeLabel = document.getElementById('mode-label');
+            
+            if (modeLabel) {
+                modeLabel.textContent = isAgentMode ? 'Agent Mode: Active' : 'Chat Mode';
+            }
+        }
+        
+        // Initialize on load
+        window.addEventListener('load', initialize);
+        
     } catch (error) {
         console.error('Failed to initialize webview:', error);
     }

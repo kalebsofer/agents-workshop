@@ -21,7 +21,11 @@
       },
       {
         "command": "agent-workshop.askQuestion",
-        "title": "Ask AI Assistant"
+        "title": "Ask AI Assistant a Question"
+      },
+      {
+        "command": "agent-workshop.openAIAssistant",
+        "title": "Open AI Assistant"
       }
     ],
     "viewsContainers": {

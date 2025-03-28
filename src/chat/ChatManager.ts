@@ -1,11 +1,11 @@
 /**
  * chatManager.ts
  * 
- * Manages the conversation history between the user and AI assistant.
+ * Manages the chat history between the user and AI assistant.
  * Responsible for:
  * - Storing messages as an array of {role, content} objects
  * - Managing context window size (token limits)
- * - Providing access to conversation history for API requests
+ * - Providing access to chat history for API requests
  */
 
 import * as config from '../config';
@@ -87,7 +87,7 @@ export class chatManager {
         }
     }
 
-    public clearConversation(keepSystemMessages: boolean = true): void {
+    public clearchat(keepSystemMessages: boolean = true): void {
         if (keepSystemMessages) {
             const systemMessages = this.messages.filter(m => m.role === 'system');
             this.messages = systemMessages;
@@ -102,7 +102,7 @@ export class chatManager {
         return [...this.messages];
     }
 
-    public getConversationLength(): number {
+    public getchatLength(): number {
         return this.messages.length;
     }
 
