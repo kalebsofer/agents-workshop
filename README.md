@@ -1,13 +1,13 @@
-# IDE Assistant with Cloud LLMs
+# AI Agent Workshop
 
-A VS Code extension that provides an AI-powered coding assistant, using cloud LLM providers (Anthropic Claude, OpenAI, or Deepseek).
+A VS Code extension that provides an AI-powered coding assistant using OpenAI API.
 
 ## Features
 
 - AI Chat Interface within VS Code
 - Context-Aware Responses with file attachments
 - Split View Integration
-- Multiple AI Provider support (Anthropic, OpenAI, Deepseek)
+- Secure API key management
 
 ## Setup
 
@@ -32,18 +32,16 @@ A VS Code extension that provides an AI-powered coding assistant, using cloud LL
 
 Set the following in VS Code settings:
 
-* `soft-assist.provider`: Choose "anthropic", "openai", or "deepseek"
-* `soft-assist.anthropicApiKey`: Your Anthropic API key
-* `soft-assist.anthropicModel`: Model to use (default: 'claude-3-haiku-20240307')
-* `soft-assist.openaiApiKey`: Your OpenAI API key
-* `soft-assist.openaiModel`: Model to use (default: 'gpt-3.5-turbo')
-* `soft-assist.deepseekApiKey`: Your Deepseek API key
-* `soft-assist.deepseekModel`: Model to use (default: 'deepseek-coder')
+* `agent-workshop.openaiApiKey`: Your OpenAI API key
+* `agent-workshop.openaiModel`: Model to use (default: 'gpt-o3-mini')
 
-API keys can also be set via environment variables:
-- `ANTHROPIC_API_KEY`
+The API key can also be set via environment variable:
 - `OPENAI_API_KEY`
-- `DEEPSEEK_API_KEY`
+
+Or in a `.env` file at the root of your project:
+```
+OPENAI_API_KEY=your_api_key_here
+```
 
 ## Usage
 
@@ -57,20 +55,9 @@ API keys can also be set via environment variables:
 
 This extension contributes the following settings:
 
-* `soft-assist.provider`: The AI provider to use (default: 'anthropic')
-* `soft-assist.anthropicApiKey`: API key for Anthropic Claude
-* `soft-assist.anthropicModel`: Anthropic model to use (default: 'claude-3-haiku-20240307')
-* `soft-assist.openaiApiKey`: API key for OpenAI
-* `soft-assist.openaiModel`: OpenAI model to use (default: 'gpt-3.5-turbo')
-* `soft-assist.deepseekApiKey`: API key for Deepseek
-* `soft-assist.deepseekModel`: Deepseek model to use (default: 'deepseek-coder')
+* `agent-workshop.openaiApiKey`: API key for OpenAI
+* `agent-workshop.openaiModel`: OpenAI model to use (default: 'gpt-o3-mini')
 
-## Known Issues
-
-- API keys should be stored securely
-- Large files may take longer to process
-- Currently only supports text-based files for context
-- Token limits vary by provider and model
 
 ## Development
 
@@ -84,34 +71,3 @@ This extension contributes the following settings:
    npm run compile
    ```
 4. Press F5 to start debugging
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## **License**
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Release Notes
-
-### 0.0.3
-
-- Added support for cloud LLM providers (Anthropic, OpenAI, Deepseek)
-- Configuration options for API providers
-
-### 0.0.1
-
-Initial release of Assistant:
-- Basic chat interface
-- File context support
-- Split view integration
-
-
-## Acknowledgments
-
-- Anthropic Claude, OpenAI GPT, and Deepseek API integrations
-
-
-### Tips
-<a href="https://www.buymeacoffee.com/kalebsofer" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>

@@ -27,11 +27,11 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
-	let openAIPanelCommand = vscode.commands.registerCommand('soft-assist.openAIPanel', () => {
+	let openAIPanelCommand = vscode.commands.registerCommand('agent-workshop.openAIPanel', () => {
 		AIPanel.createOrShow(context.extensionUri);
 	});
 
-	let askQuestionCommand = vscode.commands.registerCommand('soft-assist.askQuestion', async () => {
+	let askQuestionCommand = vscode.commands.registerCommand('agent-workshop.askQuestion', async () => {
 		const question = await vscode.window.showInputBox({
 			prompt: 'What would you like to ask?',
 			placeHolder: 'Enter your question...'

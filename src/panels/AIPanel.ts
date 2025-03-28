@@ -1,30 +1,39 @@
+/**
+ * AIPanel.ts
+ * 
+ * This file defines the main panel for the AI Assistant extension.
+ * It manages:
+ * - Creating and displaying the main assistant webview panel
+ * - Handling communication between the VS Code extension and webview
+ * - Processing API requests to OpenAI
+ * - Managing file attachments as context for AI queries
+ * - Error handling and user feedback
+ */
+
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as config from '../config';
 
-// Updated interface to handle multiple AI providers
-interface AIResponse {
+// Types
+interface OpenAIMessage {
+    role: 'user' | 'assistant' | 'system';
     content: string;
 }
 
-// Add provider-specific interfaces
-interface AnthropicResponse {
-    content: Array<{type: string, text: string}>;
+interface OpenAIRequest {
+    model: string;
+    messages: OpenAIMessage[];
+    max_tokens: number;
 }
 
 interface OpenAIResponse {
     choices: Array<{message: {content: string}}>;
-}
-
-interface DeepseekResponse {
-    outputs: Array<{text: string}>;
-}
-
-// Enum for supported providers
-enum AIProvider {
-    Anthropic = 'anthropic',
-    OpenAI = 'openai',
-    Deepseek = 'deepseek'
+    error?: {
+        message: string;
+        type: string;
+        code?: string;
+    };
 }
 
 export class AIPanel {
@@ -33,47 +42,14 @@ export class AIPanel {
     private _disposables: vscode.Disposable[] = [];
     private static readonly _outputChannel = vscode.window.createOutputChannel('AI Assistant');
     private attachedFiles: Map<string, string> = new Map();
-    private _extensionPath: string;
+    private readonly _extensionPath: string;
     
-    // Get provider from settings with anthropic as default
-    private _getProvider(): AIProvider {
-        const config = vscode.workspace.getConfiguration('soft-assist');
-        const provider = config.get<string>('provider', 'anthropic');
-        return provider as AIProvider;
+    private get _apiKey(): string {
+        return config.getApiKey();
     }
     
-    // Get API key from settings or env
-    private _getApiKey(): string {
-        const provider = this._getProvider();
-        const config = vscode.workspace.getConfiguration('soft-assist');
-        
-        switch(provider) {
-            case AIProvider.Anthropic:
-                return config.get<string>('anthropicApiKey', process.env.ANTHROPIC_API_KEY || '');
-            case AIProvider.OpenAI:
-                return config.get<string>('openaiApiKey', process.env.OPENAI_API_KEY || '');
-            case AIProvider.Deepseek:
-                return config.get<string>('deepseekApiKey', process.env.DEEPSEEK_API_KEY || '');
-            default:
-                return '';
-        }
-    }
-    
-    // Get model from settings based on provider
-    private _getModel(): string {
-        const provider = this._getProvider();
-        const config = vscode.workspace.getConfiguration('soft-assist');
-        
-        switch(provider) {
-            case AIProvider.Anthropic:
-                return config.get<string>('anthropicModel', 'claude-3-haiku-20240307');
-            case AIProvider.OpenAI:
-                return config.get<string>('openaiModel', 'gpt-3.5-turbo');
-            case AIProvider.Deepseek:
-                return config.get<string>('deepseekModel', 'deepseek-coder');
-            default:
-                return '';
-        }
+    private get _model(): string {
+        return config.getModel();
     }
 
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
@@ -81,6 +57,12 @@ export class AIPanel {
         this._extensionPath = extensionUri.fsPath;
         AIPanel._outputChannel.appendLine('Initializing AI Assistant panel...');
         
+        this._setupWebview(extensionUri);
+        
+        this._setupMessageHandlers();
+    }
+    
+    private _setupWebview(extensionUri: vscode.Uri): void {
         if (!this._panel.webview) {
             throw new Error('Webview is not available');
         }
@@ -92,25 +74,37 @@ export class AIPanel {
         
         this._panel.webview.html = this._getWebviewContent();
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
-        
+    }
+    
+    private _setupMessageHandlers(): void {
         this._panel.webview.onDidReceiveMessage(
-            async message => {
-                switch (message.command) {
-                    case 'askQuestion':
-                        AIPanel._outputChannel.appendLine(`Processing question: ${message.text}`);
-                        await this._handleQuestion(message.text);
-                        break;
-                    case 'pickFiles':
-                        await this._pickFiles();
-                        break;
-                    case 'removeFile':
-                        AIPanel._outputChannel.appendLine(`Processing removeFile: ${message.fileName}`);
-                        this.attachedFiles.delete(message.fileName);
-                        break;
-                    case 'clearFiles':
-                        AIPanel._outputChannel.appendLine('Clearing all attached files');
-                        this.attachedFiles.clear();
-                        break;
+            async (message: {command: string; text?: string; fileName?: string}) => {
+                try {
+                    switch (message.command) {
+                        case 'askQuestion':
+                            if (message.text) {
+                                AIPanel._outputChannel.appendLine(`Processing question: ${message.text}`);
+                                await this._handleQuestion(message.text);
+                            }
+                            break;
+                        case 'pickFiles':
+                            await this._pickFiles();
+                            break;
+                        case 'removeFile':
+                            if (message.fileName) {
+                                AIPanel._outputChannel.appendLine(`Removing file: ${message.fileName}`);
+                                this.attachedFiles.delete(message.fileName);
+                            }
+                            break;
+                        case 'clearFiles':
+                            AIPanel._outputChannel.appendLine('Clearing all attached files');
+                            this.attachedFiles.clear();
+                            break;
+                        default:
+                            AIPanel._outputChannel.appendLine(`Unknown command: ${message.command}`);
+                    }
+                } catch (error) {
+                    this._handleError(`Error processing message: ${error}`);
                 }
             },
             null,
@@ -130,161 +124,128 @@ export class AIPanel {
             }
         );
 
-        AIPanel._outputChannel.appendLine('Initializing new AIPanel instance...');
         AIPanel.currentPanel = new AIPanel(panel, extensionUri);
-        
-        AIPanel._outputChannel.appendLine('New AI panel created and initialized');
+        AIPanel._outputChannel.appendLine('AI panel created and initialized');
         return AIPanel.currentPanel;
     }
 
-    public attachFile(fileName: string, content: string) {
+    public attachFile(fileName: string, content: string): void {
         this.attachedFiles.set(fileName, content);
-        this._panel.webview.postMessage({ 
+        this._sendMessage({ 
             type: 'fileAttached', 
             fileName: fileName 
         });
         AIPanel._outputChannel.appendLine(`Attached file: ${fileName}`);
     }
 
-    private async _handleQuestion(question: string) {
+    private async _handleQuestion(question: string): Promise<void> {
         try {
-            AIPanel._outputChannel.appendLine(`Sending request to ${this._getProvider()} API...`);
+            AIPanel._outputChannel.appendLine('Sending request to OpenAI API...');
             const startTime = Date.now();
             
-            let context = '';
-            this.attachedFiles.forEach((content, fileName) => {
-                context += `File: ${fileName}\n\`\`\`\n${content}\n\`\`\`\n\n`;
-            });
-
-            const fullPrompt = this.attachedFiles.size > 0 
-                ? `Context:\n${context}\nQuestion: ${question}`
-                : question;
-                
-            // Call appropriate API based on provider
-            const response = await this._callAIProvider(fullPrompt);
+            const prompt = this._buildPrompt(question);
+            const response = await this._callOpenAI(prompt);
             
             const duration = Date.now() - startTime;
             AIPanel._outputChannel.appendLine(`Request completed in ${duration}ms`);
             
-            this._panel.webview.postMessage({ 
+            this._sendMessage({ 
                 type: 'response', 
-                content: response.content 
+                content: response 
             });
-            AIPanel._outputChannel.appendLine('Response sent to webview');
         } catch (error) {
-            AIPanel._outputChannel.appendLine(`Error: ${error}`);
-            vscode.window.showErrorMessage(`Failed to connect to ${this._getProvider()} API: ${error}`);
+            this._handleError(`Failed to connect to OpenAI API: ${error}`);
         }
     }
     
-    private async _callAIProvider(prompt: string): Promise<AIResponse> {
-        const provider = this._getProvider();
-        const apiKey = this._getApiKey();
-        const model = this._getModel();
+    private _buildPrompt(question: string): string {
+        if (this.attachedFiles.size === 0) {
+            return question;
+        }
+        
+        let context = '';
+        this.attachedFiles.forEach((content, fileName) => {
+            context += `File: ${fileName}\n\`\`\`\n${content}\n\`\`\`\n\n`;
+        });
+        
+        return `Context:\n${context}\nQuestion: ${question}`;
+    }
+    
+    private async _callOpenAI(prompt: string): Promise<string> {
+        const apiKey = this._apiKey;
         
         if (!apiKey) {
-            throw new Error(`No API key found for ${provider}. Please set it in settings or environment variables.`);
+            this._showApiKeyMissingHelp();
+            throw new Error('No API key found for OpenAI. Please set it in settings or environment variables.');
         }
         
-        switch(provider) {
-            case AIProvider.Anthropic:
-                return this._callAnthropic(prompt, apiKey, model);
-            case AIProvider.OpenAI:
-                return this._callOpenAI(prompt, apiKey, model);
-            case AIProvider.Deepseek:
-                return this._callDeepseek(prompt, apiKey, model);
-            default:
-                throw new Error(`Unsupported provider: ${provider}`);
-        }
-    }
-    
-    private async _callAnthropic(prompt: string, apiKey: string, model: string): Promise<AIResponse> {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': apiKey,
-                'anthropic-version': '2023-06-01'
-            },
-            body: JSON.stringify({
-                model: model,
-                messages: [
-                    { role: 'user', content: prompt }
-                ],
-                max_tokens: 4000
-            }),
-        });
+        const requestBody: OpenAIRequest = {
+            model: this._model,
+            messages: [
+                { role: 'user', content: prompt }
+            ],
+            max_tokens: config.MAX_TOKENS
+        };
         
-        const data = await response.json() as AnthropicResponse;
-        if (!response.ok) {
-            throw new Error(`Anthropic API error: ${JSON.stringify(data)}`);
-        }
-        
-        // Extract content from Anthropic's response format
-        const content = data.content
-            .filter(item => item.type === 'text')
-            .map(item => item.text)
-            .join('');
+        try {
+            const response = await fetch(config.OPENAI_API_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify(requestBody)
+            });
             
-        return { content };
-    }
-    
-    private async _callOpenAI(prompt: string, apiKey: string, model: string): Promise<AIResponse> {
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: model,
-                messages: [
-                    { role: 'user', content: prompt }
-                ],
-                max_tokens: 4000
-            }),
-        });
-        
-        const data = await response.json() as OpenAIResponse;
-        if (!response.ok) {
-            throw new Error(`OpenAI API error: ${JSON.stringify(data)}`);
+            const data = await response.json() as OpenAIResponse;
+            
+            if (!response.ok) {
+                throw new Error(`API error: ${data.error?.message || JSON.stringify(data)}`);
+            }
+            
+            if (!data.choices || !data.choices[0]?.message?.content) {
+                throw new Error('Invalid response format from OpenAI API');
+            }
+            
+            return data.choices[0].message.content;
+        } catch (error) {
+            AIPanel._outputChannel.appendLine(`API call error: ${error}`);
+            throw error;
         }
-        
-        return { content: data.choices[0].message.content };
-    }
-    
-    private async _callDeepseek(prompt: string, apiKey: string, model: string): Promise<AIResponse> {
-        const response = await fetch('https://api.deepseek.com/v1/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: model,
-                prompt: prompt,
-                max_tokens: 4000
-            }),
-        });
-        
-        const data = await response.json() as DeepseekResponse;
-        if (!response.ok) {
-            throw new Error(`Deepseek API error: ${JSON.stringify(data)}`);
-        }
-        
-        return { content: data.outputs[0].text };
     }
 
-    private async _pickFiles() {
-        const files = await vscode.window.showOpenDialog({
-            canSelectMany: true,
-            openLabel: 'Add to Context',
-            filters: {
-                'All Files': ['*']
+    private _showApiKeyMissingHelp(): void {
+        const message = 'OpenAI API key not found. Set it in settings or .env file.';
+        const setKey = 'Set in Settings';
+        const envHelp = 'Show .env Help';
+        
+        vscode.window.showErrorMessage(message, setKey, envHelp).then(selection => {
+            if (selection === setKey) {
+                vscode.commands.executeCommand('workbench.action.openSettings', `${config.SECTION}.${config.API_KEY}`);
+            } else if (selection === envHelp) {
+                vscode.window.showInformationMessage(
+                    'You can also set your API key in a .env file at the root of the project:\n\n' +
+                    'OPENAI_API_KEY=your_api_key_here\n\n' +
+                    'Make sure .env is in your .gitignore to avoid exposing your key.'
+                );
             }
         });
+    }
 
-        if (files) {
+    private async _pickFiles(): Promise<void> {
+        try {
+            const files = await vscode.window.showOpenDialog({
+                canSelectMany: true,
+                openLabel: 'Add to Context',
+                filters: {
+                    'All Files': ['*']
+                }
+            });
+    
+            if (!files || files.length === 0) {
+                return;
+            }
+            
             for (const file of files) {
                 try {
                     const content = await vscode.workspace.fs.readFile(file);
@@ -294,10 +255,12 @@ export class AIPanel {
                     AIPanel._outputChannel.appendLine(`Error reading file ${file.fsPath}: ${error}`);
                 }
             }
+        } catch (error) {
+            this._handleError(`Error picking files: ${error}`);
         }
     }
 
-    private _getWebviewContent() {
+    private _getWebviewContent(): string {
         try {
             const htmlPath = path.join(this._extensionPath, 'out', 'webview', 'webview.html');
             
@@ -307,41 +270,49 @@ export class AIPanel {
             
             let html = fs.readFileSync(htmlPath, 'utf8');
 
-            // Get the webview js file
+            // Replace script reference with webview URI
             const jsPath = vscode.Uri.file(
                 path.join(this._extensionPath, 'out', 'webview', 'webview.js')
             );
             const jsUri = this._panel.webview.asWebviewUri(jsPath);
-
-            // Replace the script src with the correct URI
             const scriptSrc = `<script src="${jsUri}"></script>`;
-            html = html.replace('<script src="webview.js"></script>', scriptSrc);
             
-            return html;
+            return html.replace('<script src="webview.js"></script>', scriptSrc);
         } catch (error) {
-            AIPanel._outputChannel.appendLine(`Error loading webview content: ${error}`);
-            throw error;
+            this._handleError(`Error loading webview content: ${error}`);
+            return `<html><body><h1>Error loading content</h1><p>${error}</p></body></html>`;
         }
     }
+    
+    private _sendMessage(message: any): void {
+        if (this._panel.webview) {
+            this._panel.webview.postMessage(message);
+        }
+    }
+    
+    private _handleError(message: string): void {
+        AIPanel._outputChannel.appendLine(`Error: ${message}`);
+        vscode.window.showErrorMessage(message);
+    }
 
-    public dispose() {
+    public dispose(): void {
         AIPanel._outputChannel.appendLine('Disposing AI panel...');
         AIPanel.currentPanel = undefined;
         this._panel.dispose();
-        while (this._disposables.length) {
-            const disposable = this._disposables.pop();
-            if (disposable) {
-                disposable.dispose();
-            }
+        
+        for (const disposable of this._disposables) {
+            disposable.dispose();
         }
+        this._disposables = [];
+        
         AIPanel._outputChannel.appendLine('AI panel disposed');
-    }
-
-    public sendMessage(message: any) {
-        this._panel.webview.postMessage(message);
     }
 
     public isVisible(): boolean {
         return this._panel.visible;
+    }
+    
+    public sendMessage(message: any): void {
+        this._sendMessage(message);
     }
 } 
