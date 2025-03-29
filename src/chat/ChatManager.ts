@@ -8,19 +8,13 @@
  * - Providing access to chat history for API requests
  */
 
-import * as config from '../config';
+import type { Message } from '../types/chat';
 
 // Token estimation for OpenAI models:
 // - 1 token ≈ 4 characters in English
 // This is a rough estimate; proper tokenization would require a specialized tokenizer
 function estimateTokens(text: string): number {
     return Math.ceil(text.length / 4);
-}
-
-export interface Message {
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-    timestamp?: number;
 }
 
 export class chatManager {

@@ -1,8 +1,26 @@
-/**
- * AgentTools.ts
- * 
- * Defines the tools that agent workers can use to perform tasks.
- */
+import * as vscode from 'vscode';
+
+export interface WorkerMessage {
+    role: 'system' | 'user' | 'assistant' | 'tool';
+    content: string;
+    toolName?: string;
+    toolCallId?: string;
+    toolCalls?: ToolCall[];
+}
+
+export interface WorkerResponse {
+    result: string;
+    success: boolean;
+    error?: string;
+    toolsUsed?: string[];
+    additionalData?: Record<string, any>;
+}
+
+export interface ToolCall {
+    name: string;
+    id: string;
+    arguments: Record<string, any>;
+}
 
 export interface ToolResult {
     success: boolean;
@@ -46,4 +64,24 @@ export type AgentTool = ReadFileTool | WriteFileTool | ListFilesTool | SearchCod
 export interface ToolsProvider {
     getTools(): AgentTool[];
     getTool(name: string): AgentTool | undefined;
+}
+
+// From LangGraphAgent.ts
+export interface ExecutionResult {
+    success: boolean;
+    response?: string;
+    error?: string;
+}
+
+export interface ExecutionProgress {
+    readonly onProgress: vscode.Event<string>;
+    report(message: string): void;
+}
+
+// From WorkspaceManager.ts
+export interface FileChange {
+    filePath: string;
+    originalContent?: string;
+    newContent: string;
+    operation: 'create' | 'modify' | 'delete';
 } 

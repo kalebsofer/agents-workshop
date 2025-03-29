@@ -10,6 +10,7 @@ import { AIPanel } from './panels/AIPanel';
 
 export function activate(context: vscode.ExtensionContext) {
 	console.log('AI Assistant extension is now active');
+	console.log('Registering command: agent-workshop.openAIPanel');
 
 	// Register webview provider
 	const provider = vscode.window.registerWebviewViewProvider('agent-workshop-view', {
@@ -38,51 +39,25 @@ export function activate(context: vscode.ExtensionContext) {
 	
 	// Register open AI Panel command
 	const openAIPanelCommand = vscode.commands.registerCommand('agent-workshop.openAIPanel', () => {
+		console.log('Executing command: agent-workshop.openAIPanel');
 		AIPanel.createOrShow(context.extensionUri);
 	});
 	
-	// Register ask question command
-	const askQuestionCommand = vscode.commands.registerCommand('agent-workshop.askQuestion', async () => {
-		const question = await vscode.window.showInputBox({
-			prompt: 'Ask AI Assistant a question',
-			placeHolder: 'What would you like to know?'
-		});
-		
-		if (question) {
-			const panel = await AIPanel.createOrShow(context.extensionUri);
-			// Send the question to the panel
-			// This will be handled by the panel's message handler
-			panel.sendMessage({
-				command: 'askQuestion',
-				text: question
-			});
-		}
-	});
-	
-	// Register command to open AI Assistant
-	const openAIAssistantCommand = vscode.commands.registerCommand('agent-workshop.openAIAssistant', () => {
-		AIPanel.createOrShow(context.extensionUri);
-	});
-
 	// Register status bar item
 	const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
 	statusBarItem.text = "$(sparkle) AI";
 	statusBarItem.tooltip = "Open AI Assistant";
-	statusBarItem.command = 'agent-workshop.openAIAssistant';
+	statusBarItem.command = 'agent-workshop.openAIPanel';
 	statusBarItem.show();
 	
 	// Register all subscriptions
 	context.subscriptions.push(
 		provider, 
-		openAIPanelCommand, 
-		askQuestionCommand, 
-		openAIAssistantCommand,
+		openAIPanelCommand,
 		statusBarItem
 	);
 
-	// When the extension activates, open the AI Panel - only once
-	AIPanel.createOrShow(context.extensionUri);
-	vscode.commands.executeCommand('workbench.action.focusSecondSideBar');
+	console.log('AI Assistant extension fully activated with command agent-workshop.openAIPanel registered');
 }
 
 function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri, htmlPath: string): string {
@@ -98,5 +73,8 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri, ht
 }
 
 export function deactivate() {
-	// Clean up resources when the extension is deactivated
+	if (AIPanel.currentPanel) {
+		AIPanel.currentPanel.dispose();
+	}
+	console.log('AI Assistant extension has been deactivated');
 }

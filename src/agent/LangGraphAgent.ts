@@ -1,33 +1,23 @@
 /**
- * AgentExecutor.ts
+ * LangGraphAgent.ts
  * 
- * Main entry point for the AI coding agent. Coordinates the orchestrator,
- * workers, and tools to execute coding tasks.
+ * Main entry point for the LangGraph-based AI coding agent.
+ * Uses a graph-based approach for organizing agent workflow.
  */
 
 import * as vscode from 'vscode';
-import { WorkspaceManager } from './WorkspaceManager';
-import { ToolsImplementation } from './ToolsImplementation';
-import { Orchestrator, OrchestratorRequest } from './Orchestrator';
 import { Logger } from './Logger';
+import { ToolsImplementation } from './ToolsImplementation';
+import { WorkspaceManager } from './WorkspaceManager';
+import { createAgentGraph } from './graph';
+import type { ExecutionResult, ExecutionProgress } from '../types/agent';
 
-export interface ExecutionResult {
-    success: boolean;
-    response?: string;
-    error?: string;
-}
-
-export interface ExecutionProgress {
-    readonly onProgress: vscode.Event<string>;
-    report(message: string): void;
-}
-
-export class AgentExecutor {
+export class LangGraphAgent {
     private readonly logger = Logger.getInstance();
-    private readonly componentName = 'AgentExecutor';
+    private readonly componentName = 'LangGraphAgent';
     private readonly workspaceManager: WorkspaceManager;
     private readonly toolsProvider: ToolsImplementation;
-    private readonly orchestrator: Orchestrator;
+    private readonly graph: ReturnType<typeof createAgentGraph>;
     private readonly progressEmitter = new vscode.EventEmitter<string>();
     
     private _isExecuting: boolean = false;
@@ -36,11 +26,11 @@ export class AgentExecutor {
         try {
             this.workspaceManager = new WorkspaceManager();
             this.toolsProvider = new ToolsImplementation(this.workspaceManager);
-            this.orchestrator = new Orchestrator(this.toolsProvider, this.workspaceManager);
+            this.graph = createAgentGraph();
             
-            this.logger.log(this.componentName, 'AI Coding Agent initialized successfully');
+            this.logger.log(this.componentName, 'LangGraph AI Coding Agent initialized successfully');
         } catch (error) {
-            this.logger.log(this.componentName, `Error initializing AI Coding Agent: ${error}`);
+            this.logger.log(this.componentName, `Error initializing LangGraph AI Coding Agent: ${error}`);
             throw error;
         }
     }
@@ -86,30 +76,78 @@ export class AgentExecutor {
                 };
             }
             
-            this.logger.log(this.componentName, `Executing task: ${query}`);
-            this.progressEmitter.fire('Analyzing task...');
-            
-            // Prepare the request
-            const request: OrchestratorRequest = {
-                userQuery: query
-            };
-            
-            // Execute the request
-            this.progressEmitter.fire('Planning execution...');
-            const response = await this.orchestrator.execute(request);
-            
-            if (!response.success) {
-                this.progressEmitter.fire(`Error: ${response.error || 'Task execution failed'}`);
+            // Validate the query
+            if (!query || typeof query !== 'string' || query.trim() === '') {
+                this.logger.log(this.componentName, 'Error: Empty or invalid query provided');
                 return {
                     success: false,
-                    error: response.error || 'Task execution failed'
+                    error: 'Empty or invalid query provided'
                 };
             }
             
-            // Return the synthesized results
+            this.logger.log(this.componentName, `Executing task: ${query}`);
+            this.progressEmitter.fire('Analyzing task...');
+            
+            // Create event handler for progress updates
+            const eventHandler = {
+                handleNodeStart: (data: any) => {
+                    const nodeName = data.node.name;
+                    this.progressEmitter.fire(`Executing: ${nodeName}...`);
+                },
+                handleNodeEnd: (data: any) => {
+                    // Optional update when a node finishes
+                },
+                handleNodeError: (data: any) => {
+                    this.progressEmitter.fire(`Error in ${data.node.name}: ${data.error}`);
+                },
+            };
+            
+            // Prepare the input
+            const input = {
+                task: { query: query.trim() },
+                toolsProvider: this.toolsProvider
+            };
+            
+            this.logger.log(this.componentName, `Input prepared: ${JSON.stringify(input)}`);
+            this.progressEmitter.fire('Executing graph...');
+            
+            // Call LangGraph graph with the input
+            const result = await this.graph.invoke({
+                // Only include fields defined in the state graph
+                task: { query: query.trim() },
+                currentSubtask: null,
+                results: {},
+                error: null,
+                nextStep: 'planExecution' // Skip initializeState, go directly to planning
+            }, {
+                // Pass the toolsProvider separately in the config
+                configurable: {
+                    input: input
+                }
+            });
+            
+            if (result.error) {
+                return {
+                    success: false,
+                    error: result.error
+                };
+            }
+            
+            // Add detailed logging for successful results
+            if (result.finalResult) {
+                this.logger.log(this.componentName, `Graph execution completed successfully with result (length: ${result.finalResult.length})`);
+                this.logger.log(this.componentName, `Response preview: ${result.finalResult.substring(0, 100)}...`);
+                
+                if (result.finalResult.trim() === '') {
+                    this.logger.log(this.componentName, 'WARNING: Empty final result detected after graph execution');
+                }
+            } else {
+                this.logger.log(this.componentName, 'Graph execution completed without a final result');
+            }
+            
             return {
                 success: true,
-                response: response.results || 'Task completed successfully, but no results were generated'
+                response: result.finalResult || 'Task completed but no results were generated'
             };
         } catch (error) {
             const errorMessage = `Error executing task: ${error}`;

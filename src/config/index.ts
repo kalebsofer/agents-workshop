@@ -10,9 +10,21 @@ import * as fs from 'fs';
 import * as dotenv from 'dotenv';
 
 try {
-    const envPath = path.join(__dirname, '..', '.env');
+    let envPath = path.join(process.cwd(), '.env');
+    
+    if (!fs.existsSync(envPath)) {
+        envPath = path.join(__dirname, '..', '..', '.env');
+    }
+    
+    if (!fs.existsSync(envPath)) {
+        envPath = path.join(__dirname, '..', '..', '..', '.env');
+    }
+    
     if (fs.existsSync(envPath)) {
+        console.log(`Loading .env from: ${envPath}`);
         dotenv.config({ path: envPath });
+    } else {
+        console.warn('.env file not found at any expected location');
     }
 } catch (error) {
     console.error('Error loading .env file:', error);
@@ -32,7 +44,13 @@ export function getConfig(): vscode.WorkspaceConfiguration {
 export function getApiKey(): string {
     const config = getConfig();
     const configKey = config.get<string>(API_KEY, '');
-    return configKey || process.env.OPENAI_API_KEY || '';
+    const envKey = process.env.OPENAI_API_KEY || '';
+    
+    if (!configKey && !envKey) {
+        console.warn('No API key found in config or environment variables');
+    }
+    
+    return configKey || envKey || '';
 }
 
 export function getModel(): string {

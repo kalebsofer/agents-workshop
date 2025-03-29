@@ -13,30 +13,12 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as config from '../config';
-import { chatManager, Message } from '../chat/ChatManager';
-import { AgentExecutor, ExecutionResult } from '../agent/AgentExecutor';
-
-// Types
-interface OpenAIMessage {
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-}
-
-interface OpenAIRequest {
-    model: string;
-    messages: OpenAIMessage[];
-    max_tokens: number;
-}
-
-interface OpenAIResponse {
-    choices: Array<{message: {content: string}}>;
-    error?: {
-        message: string;
-        type: string;
-        code?: string;
-    };
-}
+import * as config from '../config/index';
+import { chatManager } from '../chat/ChatManager';
+import { LangGraphAgent } from '../agent/LangGraphAgent';
+import { ExecutionResult } from '../types/agent';
+import type { Message } from '../types/chat';
+import type { OpenAIMessage, OpenAIRequest, OpenAIResponse } from '../types/panel';
 
 export class AIPanel {
     public static currentPanel: AIPanel | undefined;
@@ -46,7 +28,7 @@ export class AIPanel {
     private attachedFiles: Map<string, string> = new Map();
     private readonly _extensionPath: string;
     private _chat: chatManager;
-    private readonly _agentExecutor: AgentExecutor;
+    private readonly _agentExecutor: LangGraphAgent;
     private _isAgentMode: boolean = false;
     
     private get _apiKey(): string {
@@ -69,7 +51,7 @@ export class AIPanel {
         
         // Initialize the agent executor
         try {
-            this._agentExecutor = new AgentExecutor();
+            this._agentExecutor = new LangGraphAgent();
             
             // Subscribe to agent progress events
             this._agentExecutor.progress.onProgress(message => {
@@ -79,7 +61,7 @@ export class AIPanel {
                 });
             });
         } catch (error) {
-            AIPanel._outputChannel.appendLine(`Error initializing agent executor: ${error}`);
+            AIPanel._outputChannel.appendLine(`Error initializing LangGraph agent: ${error}`);
             throw error;
         }
         
@@ -244,22 +226,36 @@ export class AIPanel {
             // Show loading indicator
             this._sendMessage({ type: 'loading', isLoading: true });
             
-            // Execute agent task
             const result = await this._agentExecutor.execute(question);
             
-            // Hide loading indicator
             this._sendMessage({ type: 'loading', isLoading: false });
             
+            AIPanel._outputChannel.appendLine(`Agent execution completed. Success: ${result.success}`);
+            
             if (result.success) {
+                if (!result.response || result.response.trim() === '') {
+                    AIPanel._outputChannel.appendLine('WARNING: Empty response received from agent');
+                    this._sendMessage({
+                        type: 'error',
+                        content: 'The agent completed successfully but returned an empty response. Please try again.'
+                    });
+                    return;
+                }
+                
+                AIPanel._outputChannel.appendLine(`Response length: ${result.response.length} characters`);
+                AIPanel._outputChannel.appendLine(`Response preview: ${result.response.substring(0, 100)}...`);
+                
                 // Add assistant response to chat history
-                this._chat.addAssistantMessage(result.response || 'Task completed successfully');
+                this._chat.addAssistantMessage(result.response);
                 
                 // Send response
                 this._sendMessage({ 
                     type: 'response', 
-                    content: result.response || 'Task completed successfully'
+                    content: result.response
                 });
             } else {
+                AIPanel._outputChannel.appendLine(`Agent execution failed: ${result.error || 'Unknown error'}`);
+                
                 // Send error
                 this._sendMessage({
                     type: 'error',
@@ -267,11 +263,8 @@ export class AIPanel {
                 });
             }
         } catch (error) {
-            AIPanel._outputChannel.appendLine(`Agent execution error: ${error}`);
-            
-            // Hide loading indicator
+            AIPanel._outputChannel.appendLine(`Error in agent execution: ${error}`);
             this._sendMessage({ type: 'loading', isLoading: false });
-            
             this._sendMessage({
                 type: 'error',
                 content: error instanceof Error ? error.message : String(error)
@@ -358,13 +351,7 @@ export class AIPanel {
         vscode.window.showErrorMessage(message, setKey, envHelp).then(selection => {
             if (selection === setKey) {
                 vscode.commands.executeCommand('workbench.action.openSettings', `${config.SECTION}.${config.API_KEY}`);
-            } else if (selection === envHelp) {
-                vscode.window.showInformationMessage(
-                    'You can also set your API key in a .env file at the root of the project:\n\n' +
-                    'OPENAI_API_KEY=your_api_key_here\n\n' +
-                    'Make sure .env is in your .gitignore to avoid exposing your key.'
-                );
-            }
+            } else if (selection === envHelp) {}
         });
     }
 

@@ -16,7 +16,7 @@ import {
     SearchCodeTool,
     RunCommandTool,
     ToolResult 
-} from './AgentTools';
+} from '../types/agent';
 import { WorkspaceManager } from './WorkspaceManager';
 import { Logger } from './Logger';
 

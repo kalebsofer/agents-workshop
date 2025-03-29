@@ -9,13 +9,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Logger } from './Logger';
-
-export interface FileChange {
-    filePath: string;
-    originalContent?: string;
-    newContent: string;
-    operation: 'create' | 'modify' | 'delete';
-}
+import { FileChange } from '../types/agent';
 
 export class WorkspaceManager {
     private readonly logger = Logger.getInstance();
