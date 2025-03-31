@@ -15,10 +15,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as config from '../config/index';
 import { chatManager } from '../chat/ChatManager';
-import { LangGraphAgent } from '../agent/LangGraphAgent';
+import { Agent } from '../agent/core/Agent';
 import { ExecutionResult } from '../types/agent';
 import type { Message } from '../types/chat';
 import type { OpenAIMessage, OpenAIRequest, OpenAIResponse } from '../types/panel';
+import { pendingFileChanges } from '../agent/utils/WorkspaceManager';
 
 export class AIPanel {
     public static currentPanel: AIPanel | undefined;
@@ -28,7 +29,7 @@ export class AIPanel {
     private attachedFiles: Map<string, string> = new Map();
     private readonly _extensionPath: string;
     private _chat: chatManager;
-    private readonly _agentExecutor: LangGraphAgent;
+    private readonly _agentExecutor: Agent;
     private _isAgentMode: boolean = false;
     
     private get _apiKey(): string {
@@ -51,7 +52,7 @@ export class AIPanel {
         
         // Initialize the agent executor
         try {
-            this._agentExecutor = new LangGraphAgent();
+            this._agentExecutor = new Agent();
             
             // Subscribe to agent progress events
             this._agentExecutor.progress.onProgress(message => {
@@ -61,7 +62,7 @@ export class AIPanel {
                 });
             });
         } catch (error) {
-            AIPanel._outputChannel.appendLine(`Error initializing LangGraph agent: ${error}`);
+            AIPanel._outputChannel.appendLine(`Error initializing agent: ${error}`);
             throw error;
         }
         
@@ -91,6 +92,8 @@ export class AIPanel {
                 text?: string;
                 fileName?: string;
                 agentMode?: boolean;
+                filePath?: string;
+                accept?: boolean;
             }) => {
                 try {
                     switch (message.command) {
@@ -109,6 +112,11 @@ export class AIPanel {
                                 } else {
                                     await this._handleQuestion(message.text);
                                 }
+                            }
+                            break;
+                        case 'acceptChanges':
+                            if (message.filePath) {
+                                await this._handleAcceptChanges(message.filePath, message.accept ?? true);
                             }
                             break;
                         case 'pickFiles':
@@ -144,6 +152,48 @@ export class AIPanel {
             null,
             this._disposables
         );
+    }
+    
+    /**
+     * Handle accepting or rejecting changes for a file
+     */
+    private async _handleAcceptChanges(filePath: string, accept: boolean): Promise<void> {
+        try {
+            AIPanel._outputChannel.appendLine(`${accept ? 'Accepting' : 'Rejecting'} changes for: ${filePath}`);
+            
+            // Call the agent to accept/reject changes
+            const result = await this._agentExecutor.execute(
+                `${accept ? 'Accept' : 'Reject'} changes for file: ${filePath}`
+            );
+            
+            // Send a message to the UI
+            this._sendMessage({
+                type: 'fileChangeResult',
+                filePath,
+                accepted: accept,
+                success: result.success,
+                message: result.success 
+                    ? `Changes ${accept ? 'applied to' : 'rejected for'} ${filePath}` 
+                    : (result.error || 'Failed to process changes')
+            });
+            
+            // Update pending file UI
+            this._updatePendingFilesUI();
+        } catch (error) {
+            this._handleError(`Error ${accept ? 'accepting' : 'rejecting'} changes: ${error}`);
+        }
+    }
+    
+    /**
+     * Update UI with current pending files
+     */
+    private _updatePendingFilesUI(): void {
+        const pendingFiles = Array.from(pendingFileChanges.keys());
+        
+        this._sendMessage({
+            type: 'pendingFilesUpdate',
+            files: pendingFiles
+        });
     }
 
     public static async createOrShow(extensionUri: vscode.Uri): Promise<AIPanel> {
@@ -253,6 +303,9 @@ export class AIPanel {
                     type: 'response', 
                     content: result.response
                 });
+                
+                // After each agent response, check for pending file changes
+                this._updatePendingFilesUI();
             } else {
                 AIPanel._outputChannel.appendLine(`Agent execution failed: ${result.error || 'Unknown error'}`);
                 

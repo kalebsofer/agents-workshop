@@ -1,31 +1,25 @@
 /**
- * LangGraphAgent.ts
- * 
- * Main entry point for the LangGraph-based AI coding agent.
- * Uses a graph-based approach for organizing agent workflow.
+ * Main entry point for the LangGraph-based agent using graph-based approach.
  */
 
 import * as vscode from 'vscode';
-import { Logger } from './Logger';
-import { ToolsImplementation } from './ToolsImplementation';
-import { WorkspaceManager } from './WorkspaceManager';
+import { Logger } from '../utils/Logger';
+import { WorkspaceManager } from '../utils/WorkspaceManager';
+import { pendingFileChanges } from '../utils/WorkspaceManager';
 import { createAgentGraph } from './graph';
-import type { ExecutionResult, ExecutionProgress } from '../types/agent';
+import type { ExecutionResult, ExecutionProgress } from '../../types/agent';
 
-export class LangGraphAgent {
+export class Agent {
     private readonly logger = Logger.getInstance();
-    private readonly componentName = 'LangGraphAgent';
+    private readonly componentName = 'Agent';
     private readonly workspaceManager: WorkspaceManager;
-    private readonly toolsProvider: ToolsImplementation;
     private readonly graph: ReturnType<typeof createAgentGraph>;
     private readonly progressEmitter = new vscode.EventEmitter<string>();
-    
     private _isExecuting: boolean = false;
     
     constructor() {
         try {
             this.workspaceManager = new WorkspaceManager();
-            this.toolsProvider = new ToolsImplementation(this.workspaceManager);
             this.graph = createAgentGraph();
             
             this.logger.log(this.componentName, 'LangGraph AI Coding Agent initialized successfully');
@@ -56,6 +50,11 @@ export class LangGraphAgent {
      * Execute a task using the agent
      */
     public async execute(query: string): Promise<ExecutionResult> {
+        // Special handling for accept/reject commands
+        if (query.startsWith('Accept changes for file:') || query.startsWith('Reject changes for file:')) {
+            return this.handleFileChangeCommand(query);
+        }
+        
         if (this._isExecuting) {
             return {
                 success: false,
@@ -105,10 +104,10 @@ export class LangGraphAgent {
             // Prepare the input
             const input = {
                 task: { query: query.trim() },
-                toolsProvider: this.toolsProvider
+                workspaceManager: this.workspaceManager
             };
             
-            this.logger.log(this.componentName, `Input prepared: ${JSON.stringify(input)}`);
+            this.logger.log(this.componentName, `Input prepared: ${JSON.stringify({ task: input.task })}`);
             this.progressEmitter.fire('Executing graph...');
             
             // Call LangGraph graph with the input
@@ -120,7 +119,7 @@ export class LangGraphAgent {
                 error: null,
                 nextStep: 'planExecution' // Skip initializeState, go directly to planning
             }, {
-                // Pass the toolsProvider separately in the config
+                // Pass the workspaceManager separately in the config
                 configurable: {
                     input: input
                 }
@@ -173,6 +172,56 @@ export class LangGraphAgent {
     }
     
     /**
+     * Handle file change acceptance or rejection commands directly
+     */
+    private async handleFileChangeCommand(command: string): Promise<ExecutionResult> {
+        try {
+            const isAccept = command.startsWith('Accept changes for file:');
+            const filePath = command.substring(isAccept ? 'Accept changes for file:'.length : 'Reject changes for file:'.length).trim();
+            
+            this.logger.log(this.componentName, `${isAccept ? 'Accepting' : 'Rejecting'} changes for file: ${filePath}`);
+            this.progressEmitter.fire(`${isAccept ? 'Accepting' : 'Rejecting'} changes for file: ${filePath}...`);
+            
+            if (!pendingFileChanges.has(filePath)) {
+                const errorMessage = `No pending changes found for file: ${filePath}`;
+                this.logger.log(this.componentName, errorMessage);
+                return {
+                    success: false,
+                    error: errorMessage
+                };
+            }
+            
+            let result: boolean;
+            if (isAccept) {
+                result = await this.workspaceManager.applyPendingChanges(filePath);
+                this.progressEmitter.fire(`Changes applied to: ${filePath}`);
+            } else {
+                result = this.workspaceManager.rejectPendingChanges(filePath);
+                this.progressEmitter.fire(`Changes rejected for: ${filePath}`);
+            }
+            
+            if (result) {
+                return {
+                    success: true,
+                    response: `Changes were successfully ${isAccept ? 'applied to' : 'rejected for'} ${filePath}.`
+                };
+            } else {
+                return {
+                    success: false,
+                    error: `Could not ${isAccept ? 'apply' : 'reject'} changes for ${filePath}.`
+                };
+            }
+        } catch (error) {
+            const errorMessage = `Error handling file change command: ${error}`;
+            this.logger.log(this.componentName, errorMessage);
+            return {
+                success: false,
+                error: errorMessage
+            };
+        }
+    }
+    
+    /**
      * Cancel the current execution
      */
     public cancel(): void {
@@ -187,5 +236,6 @@ export class LangGraphAgent {
      */
     public dispose(): void {
         this.progressEmitter.dispose();
+        this.workspaceManager.dispose();
     }
 } 

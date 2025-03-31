@@ -5,7 +5,7 @@
  */
 
 import { Annotation } from "@langchain/langgraph";
-import { WorkerMessage, WorkerResponse } from "../types";
+import { WorkerMessage, WorkerResponse } from "../../types";
 
 /**
  * Represents the task to be performed by the agent
@@ -13,6 +13,7 @@ import { WorkerMessage, WorkerResponse } from "../types";
 export interface Task {
     query: string;
     context?: string;
+    requiresGeneration?: boolean; // Flag to indicate if generation should follow analysis
 }
 
 /**

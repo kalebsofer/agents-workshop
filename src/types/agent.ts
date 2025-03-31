@@ -66,7 +66,7 @@ export interface ToolsProvider {
     getTool(name: string): AgentTool | undefined;
 }
 
-// From LangGraphAgent.ts
+// Agent
 export interface ExecutionResult {
     success: boolean;
     response?: string;
@@ -78,7 +78,20 @@ export interface ExecutionProgress {
     report(message: string): void;
 }
 
-// From WorkspaceManager.ts
+export enum TaskType {
+    ANALYSIS = 'executeAnalysisTask',
+    GENERATION = 'executeGenerationTask',
+    ANALYSIS_WITH_GENERATION = 'executeAnalysisWithGeneration',
+    IRRELEVANT = 'handleIrrelevantQuery'
+}
+
+export enum SubtaskType {
+    ANALYSIS = 'analysis',
+    GENERATION = 'generation',
+    TEST = 'test'
+}
+
+// WorkspaceManager
 export interface FileChange {
     filePath: string;
     originalContent?: string;

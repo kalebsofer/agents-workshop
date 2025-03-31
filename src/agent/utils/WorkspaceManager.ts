@@ -9,13 +9,19 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Logger } from './Logger';
-import { FileChange } from '../types/agent';
+import { FileChange } from '../../types/agent';
+
+// Track pending file changes across the application
+export const pendingFileChanges = new Map<string, { original: string, modified: string }>();
 
 export class WorkspaceManager {
     private readonly logger = Logger.getInstance();
     private readonly componentName = 'WorkspaceManager';
     private readonly workspaceRoot: string;
     private changeHistory: FileChange[] = [];
+    // Decorations for inline diff
+    private additionDecorationType: vscode.TextEditorDecorationType;
+    private deletionDecorationType: vscode.TextEditorDecorationType;
 
     constructor() {
         const folders = vscode.workspace.workspaceFolders;
@@ -27,6 +33,34 @@ export class WorkspaceManager {
             this.workspaceRoot = folders[0].uri.fsPath;
             this.logger.log(this.componentName, `Workspace root set to: ${this.workspaceRoot}`);
         }
+        
+        // Create decoration types for inline diff
+        this.additionDecorationType = vscode.window.createTextEditorDecorationType({
+            backgroundColor: 'rgba(0, 255, 0, 0.2)',
+            isWholeLine: true,
+            after: {
+                contentText: '  // Addition',
+                color: 'rgba(0, 170, 0, 0.8)',
+                fontStyle: 'italic'
+            }
+        });
+        
+        this.deletionDecorationType = vscode.window.createTextEditorDecorationType({
+            backgroundColor: 'rgba(255, 0, 0, 0.2)',
+            isWholeLine: true,
+            after: {
+                contentText: '  // Deletion',
+                color: 'rgba(170, 0, 0, 0.8)',
+                fontStyle: 'italic'
+            }
+        });
+    }
+
+    /**
+     * Get the workspace root path
+     */
+    public getWorkspaceRoot(): string {
+        return this.workspaceRoot;
     }
 
     /**
@@ -263,5 +297,132 @@ export class WorkspaceManager {
             return filePath;
         }
         return path.join(this.workspaceRoot, filePath);
+    }
+
+    /**
+     * Show inline diff directly in the file with decorations
+     * Returns file path for reference in chat
+     */
+    public async showInlineDiff(filePath: string, originalContent: string, newContent: string): Promise<string> {
+        this.logger.log(this.componentName, `Showing inline diff for: ${filePath}`);
+        
+        // Store pending changes
+        pendingFileChanges.set(filePath, { original: originalContent, modified: newContent });
+        
+        // Get the full file path
+        const fullPath = this.resolveFilePath(filePath);
+        const uri = vscode.Uri.file(fullPath);
+        
+        try {
+            // Open the document and show it
+            const document = await vscode.workspace.openTextDocument(uri);
+            const editor = await vscode.window.showTextDocument(document);
+            
+            // Calculate the diff between original and new content
+            const originalLines = originalContent.split('\n');
+            const newLines = newContent.split('\n');
+            
+            // Simple diff algorithm to find added/removed lines
+            const additionDecorations: vscode.DecorationOptions[] = [];
+            const deletionDecorations: vscode.DecorationOptions[] = [];
+            
+            // This is a simplistic diff approach - for production you might want to use a full diff library
+            let longerLength = Math.max(originalLines.length, newLines.length);
+            
+            for (let i = 0; i < longerLength; i++) {
+                const originalLine = i < originalLines.length ? originalLines[i] : null;
+                const newLine = i < newLines.length ? newLines[i] : null;
+                
+                // If lines are different, mark them
+                if (originalLine !== newLine) {
+                    const range = new vscode.Range(
+                        new vscode.Position(i, 0),
+                        new vscode.Position(i, Math.max(originalLine?.length || 0, newLine?.length || 0))
+                    );
+                    
+                    // If line is in new content but not original (or different), it's an addition
+                    if (newLine !== null && (originalLine === null || originalLine !== newLine)) {
+                        additionDecorations.push({ range });
+                    }
+                    
+                    // If line is in original content but not new (or different), it's a deletion
+                    if (originalLine !== null && (newLine === null || originalLine !== newLine)) {
+                        deletionDecorations.push({ range });
+                    }
+                }
+            }
+            
+            // Apply decorations
+            editor.setDecorations(this.additionDecorationType, additionDecorations);
+            editor.setDecorations(this.deletionDecorationType, deletionDecorations);
+            
+            return filePath;
+        } catch (error) {
+            this.logger.log(this.componentName, `Error showing inline diff: ${error}`);
+            throw new Error(`Failed to show inline diff: ${error}`);
+        }
+    }
+    
+    /**
+     * Apply pending changes for a specific file
+     */
+    public async applyPendingChanges(filePath: string): Promise<boolean> {
+        const pendingChange = pendingFileChanges.get(filePath);
+        
+        if (!pendingChange) {
+            this.logger.log(this.componentName, `No pending changes found for: ${filePath}`);
+            return false;
+        }
+        
+        // Apply the changes
+        const result = await this.writeFile(filePath, pendingChange.modified, false);
+        
+        // Remove the pending change
+        pendingFileChanges.delete(filePath);
+        
+        // Clear decorations in editor if open
+        const uri = vscode.Uri.file(this.resolveFilePath(filePath));
+        const editors = vscode.window.visibleTextEditors.filter(editor => editor.document.uri.fsPath === uri.fsPath);
+        
+        editors.forEach(editor => {
+            editor.setDecorations(this.additionDecorationType, []);
+            editor.setDecorations(this.deletionDecorationType, []);
+        });
+        
+        return result;
+    }
+    
+    /**
+     * Reject pending changes for a specific file
+     */
+    public rejectPendingChanges(filePath: string): boolean {
+        // Remove the pending change
+        const hadPendingChanges = pendingFileChanges.delete(filePath);
+        
+        // Clear decorations in editor if open
+        const uri = vscode.Uri.file(this.resolveFilePath(filePath));
+        const editors = vscode.window.visibleTextEditors.filter(editor => editor.document.uri.fsPath === uri.fsPath);
+        
+        editors.forEach(editor => {
+            editor.setDecorations(this.additionDecorationType, []);
+            editor.setDecorations(this.deletionDecorationType, []);
+        });
+        
+        return hadPendingChanges;
+    }
+    
+    /**
+     * Get list of all files with pending changes
+     */
+    public getPendingChangeFiles(): string[] {
+        return Array.from(pendingFileChanges.keys());
+    }
+
+    /**
+     * Dispose of resources
+     */
+    public dispose(): void {
+        this.additionDecorationType.dispose();
+        this.deletionDecorationType.dispose();
     }
 } 
