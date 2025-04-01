@@ -6,11 +6,28 @@ import { AgentStateType, SubTask } from '../state';
 import { Logger } from '../../utils/Logger';
 import { createAgentTools } from '../../tools/tools';
 import { WorkspaceManager } from '../../utils/WorkspaceManager';
-import { createSubtask } from '../../utils/nodeUtils';
 import { ORCHESTRATION_PROMPT } from '../../prompts';
 
 const logger = Logger.getInstance();
-const componentName = 'Agent';
+const componentName = 'Agent Orchestrate';
+
+/**
+ * Creates a subtask with the specified parameters
+ */
+function createSubtask(
+    type: SubtaskType, 
+    description: string, 
+    task: string, 
+    context?: string
+): SubTask {
+    return {
+        id: type,
+        type: type as 'analysis' | 'generation' | 'test',
+        description,
+        task,
+        context
+    };
+}
 
 export function initialiseState(
     state: AgentStateType, 

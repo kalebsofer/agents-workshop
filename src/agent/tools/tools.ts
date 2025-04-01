@@ -1,7 +1,5 @@
 /**
- * tools.ts
- * 
- * Directly creates LangGraph-compatible tools using WorkspaceManager.
+ * Creates LangGraph-compatible tools using WorkspaceManager.
  */
 
 import { z } from "zod";
@@ -10,14 +8,9 @@ import { Command } from "@langchain/langgraph";
 import { WorkspaceManager } from "../utils/WorkspaceManager";
 import { Logger } from "../utils/Logger";
 
-// Logger instance
 const logger = Logger.getInstance();
-const componentName = 'AgentTools';
+const componentName = 'Agent Tools';
 
-/**
- * Create LangGraph tools that directly use the WorkspaceManager
- * This eliminates the unnecessary abstraction layer in the previous design
- */
 export function createAgentTools(workspaceManager: WorkspaceManager) {
     return {
         readFile: tool(
@@ -261,7 +254,6 @@ export function createAgentTools(workspaceManager: WorkspaceManager) {
                 try {
                     logger.log(componentName, `Requesting to run command: ${command}`);
                     
-                    // Use VS Code API to show a warning message
                     const vscode = require('vscode');
                     const choice = await vscode.window.showWarningMessage(
                         `The agent wants to run command: ${command}`,
@@ -274,7 +266,6 @@ export function createAgentTools(workspaceManager: WorkspaceManager) {
                     
                     logger.log(componentName, `Running command: ${command}`);
                     
-                    // Execute command
                     const { exec } = require('child_process');
                     const { promisify } = require('util');
                     const execPromise = promisify(exec);
@@ -282,7 +273,6 @@ export function createAgentTools(workspaceManager: WorkspaceManager) {
                     const workspaceFolder = workspaceManager.getWorkspaceRoot();
                     const { stdout, stderr } = await execPromise(command, { cwd: workspaceFolder });
                     
-                    // Log output
                     if (stdout) {
                         logger.log(componentName, `Command output: ${stdout}`);
                     }
@@ -310,7 +300,6 @@ export function createAgentTools(workspaceManager: WorkspaceManager) {
             }
         ),
         
-        // Example of a tool that uses Command for flow control
         analyzeAndRoute: tool(
             async ({ filePath, analysisType }) => {
                 try {
@@ -372,10 +361,6 @@ export function createAgentTools(workspaceManager: WorkspaceManager) {
     };
 }
 
-/**
- * Helper function to get the WorkspaceManager
- * This would be used directly in your workflow nodes
- */
 export function getAgentTools(workspaceManager: WorkspaceManager) {
     return Object.values(createAgentTools(workspaceManager));
 } 

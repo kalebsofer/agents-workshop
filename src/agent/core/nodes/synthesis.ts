@@ -12,7 +12,7 @@ import { SYNTHESIS_PROMPT } from '../../prompts';
 
 // Logger instance
 const logger = Logger.getInstance();
-const componentName = 'Agent';
+const componentName = 'Agent Synthesis';
 
 /**
  * Synthesizes the results of analysis, generation, and test tasks into a final response

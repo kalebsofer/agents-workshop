@@ -16,7 +16,7 @@ export const pendingFileChanges = new Map<string, { original: string, modified: 
 
 export class WorkspaceManager {
     private readonly logger = Logger.getInstance();
-    private readonly componentName = 'WorkspaceManager';
+    private readonly componentName = 'Workspace Manager';
     private readonly workspaceRoot: string;
     private changeHistory: FileChange[] = [];
     // Decorations for inline diff
