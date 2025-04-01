@@ -1,12 +1,11 @@
-import { AgentStateType, SubTask } from '../state';
+import { AgentStateType } from '../state';
 import { Logger } from '../../utils/Logger';
 import { END } from '@langchain/langgraph';
-import { SubtaskType, TaskType } from '../../../types/agent';
 import { ANALYSIS_PROMPT } from '../../prompts';
 import { ChatOpenAI } from "@langchain/openai";
 import { createAgentTools } from '../../tools/tools';
 import * as config from '../../../config';
-import { WorkerResponse } from '../../../types';
+import { WorkerResponse, SubTask, SubtaskType, TaskType } from '../../../types/agent';
 
 const logger = Logger.getInstance();
 const componentName = 'Agent Analysis';

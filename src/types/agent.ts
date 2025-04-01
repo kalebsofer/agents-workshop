@@ -91,6 +91,23 @@ export enum SubtaskType {
     TEST = 'test'
 }
 
+// Represents the task to be performed by the agent
+export interface Task {
+    query: string;
+    context?: string;
+    requiresGeneration?: boolean; // Flag to indicate if generation should follow analysis
+}
+
+// Represents a subtask in the agent workflow
+export interface SubTask {
+    id: string;
+    type: 'analysis' | 'generation' | 'test';
+    description: string;
+    task: string;
+    context?: string;
+    dependsOn?: string[];
+}
+
 // WorkspaceManager
 export interface FileChange {
     filePath: string;

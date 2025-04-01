@@ -5,32 +5,8 @@
  */
 
 import { Annotation } from "@langchain/langgraph";
-import { WorkerMessage, WorkerResponse } from "../../types";
+import { Task, SubTask, WorkerMessage, WorkerResponse } from "../../types/agent";
 
-/**
- * Represents the task to be performed by the agent
- */
-export interface Task {
-    query: string;
-    context?: string;
-    requiresGeneration?: boolean; // Flag to indicate if generation should follow analysis
-}
-
-/**
- * Represents a subtask in the agent workflow
- */
-export interface SubTask {
-    id: string;
-    type: 'analysis' | 'generation' | 'test';
-    description: string;
-    task: string;
-    context?: string;
-    dependsOn?: string[];
-}
-
-/**
- * Defines the state of the agent graph
- */
 export const AgentState = Annotation.Root({
     // The original task from the user
     task: Annotation<Task>({
@@ -78,5 +54,4 @@ export const AgentState = Annotation.Root({
     }),
 });
 
-// Type for the state used in nodes
 export type AgentStateType = typeof AgentState.State; 

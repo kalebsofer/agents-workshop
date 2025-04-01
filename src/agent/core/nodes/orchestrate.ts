@@ -1,8 +1,8 @@
 import { END } from '@langchain/langgraph';
 import { ChatOpenAI } from "@langchain/openai";
 import * as config from '../../../config';
-import { ToolsProvider, TaskType, SubtaskType } from '../../../types/agent';
-import { AgentStateType, SubTask } from '../state';
+import { ToolsProvider, TaskType, SubtaskType, SubTask } from '../../../types/agent';
+import { AgentStateType } from '../state';
 import { Logger } from '../../utils/Logger';
 import { createAgentTools } from '../../tools/tools';
 import { WorkspaceManager } from '../../utils/WorkspaceManager';
