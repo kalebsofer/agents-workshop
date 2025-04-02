@@ -19,6 +19,7 @@ export class WorkspaceManager {
     private readonly componentName = 'Workspace Manager';
     private readonly workspaceRoot: string;
     private changeHistory: FileChange[] = [];
+    
     // Decorations for inline diff
     private additionDecorationType: vscode.TextEditorDecorationType;
     private deletionDecorationType: vscode.TextEditorDecorationType;

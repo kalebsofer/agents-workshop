@@ -10,8 +10,6 @@ import { TaskType } from '../../types/agent';
 
 
 export function createAgentGraph() {
-    const logger = Logger.getInstance();
-    const componentName = 'AgentGraph';
 
     const builder = new StateGraph(AgentState)
         .addNode("planExecution", planExecution)

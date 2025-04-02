@@ -3,7 +3,6 @@
  * 
  * Shared logging utility for all agent components.
  */
-
 import * as vscode from 'vscode';
 
 export class Logger {

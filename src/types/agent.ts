@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 
+
 export interface WorkerMessage {
     role: 'system' | 'user' | 'assistant' | 'tool';
     content: string;
@@ -66,7 +67,8 @@ export interface ToolsProvider {
     getTool(name: string): AgentTool | undefined;
 }
 
-// Agent
+// Agent types -------------
+
 export interface ExecutionResult {
     success: boolean;
     response?: string;
