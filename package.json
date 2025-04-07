@@ -8,7 +8,6 @@
   },
   "activationEvents": [
     "onCommand:agent-workshop.openAIPanel",
-    "onCommand:agent-workshop.askQuestion",
     "onView:agent-workshop-view"
   ],
   "main": "./out/extension.js",
@@ -18,10 +17,6 @@
         "command": "agent-workshop.openAIPanel",
         "title": "Open AI Assistant Panel",
         "icon": "$(lightbulb)"
-      },
-      {
-        "command": "agent-workshop.askQuestion",
-        "title": "Ask AI Assistant"
       }
     ],
     "viewsContainers": {
@@ -62,7 +57,8 @@
     "copy-webview": "node scripts/copy-webview.js",
     "compile": "tsc -p ./ && npm run copy-webview",
     "watch": "tsc -watch -p ./ & npm run copy-webview",
-    "clean": "node scripts/clean.js"
+    "clean": "node scripts/clean.js",
+    "postinstall": "rimraf node_modules/.bin/@langchain"
   },
   "devDependencies": {
     "@types/node": "20.x",
@@ -71,8 +67,12 @@
     "typescript": "^5.7.3"
   },
   "dependencies": {
+    "@langchain/core": "^0.3.43",
+    "@langchain/langgraph": "^0.2.61",
+    "@langchain/openai": "^0.5.1",
     "dotenv": "^16.0.0",
-    "node-fetch": "^3.3.0"
+    "node-fetch": "^3.3.0",
+    "zod": "^3.24.2"
   },
   "private": true
 }

@@ -8,6 +8,11 @@ A VS Code extension that provides an AI-powered coding assistant using OpenAI AP
 - Context-Aware Responses with file attachments
 - Split View Integration
 - Secure API key management
+- Interactive AI Assistant panel
+- Context-aware code assistance
+- File attachment for better context
+- Persistent conversation memory
+- Agent Mode for code editing and workspace manipulation
 
 ## Setup
 
@@ -58,6 +63,29 @@ This extension contributes the following settings:
 * `agent-workshop.openaiApiKey`: API key for OpenAI
 * `agent-workshop.openaiModel`: OpenAI model to use (default: 'gpt-o3-mini')
 
+## Agent Mode
+
+The AI Assistant now includes an Agent Mode that allows the AI to directly edit your code and manipulate your workspace. When Agent Mode is enabled, the AI can:
+
+- Analyze your codebase
+- Generate new code files
+- Modify existing code
+- Run terminal commands (with your approval)
+- Perform complex multi-step coding tasks
+
+Agent Mode works by breaking down complex tasks into smaller, manageable subtasks. It uses an orchestrator-workers pattern:
+
+1. The orchestrator analyzes your request and plans the execution
+2. Specialized workers handle different aspects of the task (code analysis, generation, etc.)
+3. Results are synthesized into a coherent solution
+
+To use Agent Mode:
+
+1. Toggle the Agent Mode switch in the AI Assistant panel
+2. Ask the AI to perform a coding task
+3. The AI will analyze the task and create a plan
+4. You'll see progress updates as the AI works
+5. The AI will ask for confirmation before making changes to your workspace
 
 ## Development
 
